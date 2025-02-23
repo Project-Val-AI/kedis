@@ -1,19 +1,13 @@
+import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
 import org.jetbrains.kotlin.konan.target.HostManager
 import java.util.regex.Pattern
 
-val bigNumVersion: String by project
-val kotlinCoroutinesVersion: String by project
-val kotlinLoggingVersion: String by project
-val kotlinxDatetimeVersion: String by project
-val ktorVersion: String by project
-val semverVersion: String by project
-
 plugins {
-    kotlin("multiplatform")
-    id("org.jetbrains.dokka")
-    id("org.jetbrains.kotlinx.kover")
+    alias(libs.plugins.dokka)
+    alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.kover)
     `maven-publish`
     signing
 }
@@ -42,6 +36,10 @@ kotlin {
     withSourcesJar(
         publish = true,
     )
+    @OptIn(ExperimentalKotlinGradlePluginApi::class)
+    compilerOptions {
+        freeCompilerArgs.add("-Xexpect-actual-classes")
+    }
 
     jvm {
         jvmToolchain(17)
@@ -52,19 +50,18 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
-                implementation(kotlin("stdlib"))
-
-                api("org.jetbrains.kotlinx:kotlinx-coroutines-core:$kotlinCoroutinesVersion")
-                implementation("io.ktor:ktor-network:$ktorVersion")
-                api("com.ionspin.kotlin:bignum:$bigNumVersion")
+                implementation(libs.kotlin.stdlib)
+                api(libs.kotlinx.coroutines.core)
+                implementation(libs.ktor.network)
+                api(libs.bignum)
             }
         }
         val commonTest by getting {
             dependencies {
-                implementation(kotlin("test"))
-                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:$kotlinCoroutinesVersion")
-                implementation("org.jetbrains.kotlinx:kotlinx-datetime:$kotlinxDatetimeVersion")
-                implementation("net.swiftzer.semver:semver:$semverVersion")
+                implementation(libs.kotlin.test)
+                implementation(libs.kotlinx.coroutines.test)
+                implementation(libs.kotlinx.datetime)
+                implementation(libs.semVer)
             }
         }
     }

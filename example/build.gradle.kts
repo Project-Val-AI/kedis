@@ -1,12 +1,8 @@
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
 
-val kopVersion: String by project
-val kotlinLoggingVersion: String by project
-val ktorVersion: String by project
-
 plugins {
-    kotlin("multiplatform")
+    alias(libs.plugins.kotlin.multiplatform)
 }
 
 kotlin {
@@ -25,19 +21,16 @@ kotlin {
         val commonMain by getting {
             dependencies {
                 implementation(project(":kedis"))
-
-                implementation("io.github.domgew:kop:$kopVersion")
-
-                implementation("io.ktor:ktor-server-core:$ktorVersion")
-                implementation("io.ktor:ktor-server-cio:$ktorVersion")
-
-                implementation("io.github.oshai:kotlin-logging:$kotlinLoggingVersion")
+                implementation(libs.kop)
+                implementation(libs.ktor.server.core)
+                implementation(libs.ktor.server.cio)
+                implementation(libs.kotlin.logging)
             }
         }
         val nativeMain by creating {}
         val jvmMain by getting {
             dependencies {
-                implementation("ch.qos.logback:logback-classic:1.4.14")
+                implementation(libs.logback)
             }
         }
     }

@@ -7,11 +7,13 @@ on:
       - "kedis/**"
       - "gradle.properties"
       - "gradle/wrapper/**"
+      - "gradle/libs.versions.toml"
   pull_request:
     paths:
       - "kedis/**"
       - "gradle.properties"
       - "gradle/wrapper/**"
+      - "gradle/libs.versions.toml"
 jobs:
   test:
     runs-on: ubuntu-latest
