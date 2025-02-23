@@ -9,7 +9,6 @@ import io.github.domgew.kop.withObject
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
-import io.ktor.server.application.call
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.request.receiveText
@@ -39,21 +38,21 @@ fun commonMain() {
                 maxSize = 3,
                 keepAliveFor = 2.minutes,
                 strategy = KotlinObjectPoolStrategy.LIFO,
-            ) {
-                println("kedisPool: Creating new instance")
-                KedisClient(
-                    configuration = KedisConfiguration(
-                        endpoint = KedisConfiguration.Endpoint.HostPort(
-                            host = "127.0.0.1",
-                            port = 6379,
-                        ),
-                        authentication = KedisConfiguration.Authentication.NoAutoAuth,
-                        connectionTimeoutMillis = 250,
-                        keepAlive = true,
+            ),
+        ) {
+            println("kedisPool: Creating new instance")
+            KedisClient(
+                configuration = KedisConfiguration(
+                    endpoint = KedisConfiguration.Endpoint.HostPort(
+                        host = "127.0.0.1",
+                        port = 6379,
                     ),
-                )
-            }
-        )
+                    authentication = KedisConfiguration.Authentication.NoAutoAuth,
+                    connectionTimeoutMillis = 250,
+                    keepAlive = true,
+                ),
+            )
+        }
 
         routing {
             route("/info") {

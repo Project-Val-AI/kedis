@@ -1,14 +1,17 @@
 package io.github.domgew.kedis.impl
 
 import com.ionspin.kotlin.bignum.integer.BigInteger
-import io.github.domgew.kedis.utils.TestByteWriteChannel
 import io.ktor.utils.io.ByteReadChannel
+import io.ktor.utils.io.ByteWriteChannel
+import io.ktor.utils.io.InternalAPI
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlinx.coroutines.test.runTest
+import kotlinx.io.Buffer
+import kotlinx.io.readTo
 
 // see https://redis.io/docs/reference/protocol-spec/
 class RedisMessageTest {
@@ -741,15 +744,21 @@ class RedisMessageTest {
         return actual
     }
 
+    @OptIn(InternalAPI::class)
     private suspend fun <T : RedisMessage> encodeToString(
         value: T,
-    ): String =
-        TestByteWriteChannel()
-            .also {
-                value.writeTo(it)
-            }
-            .getAndRestWithoutLocking()
-            .decodeToString()
+    ): String {
+        val channel = TestChannel()
+        value.writeTo(channel)
+        val result = ByteArray(
+            channel.writeBuffer
+                .size
+                .toInt(),
+        )
+        channel.writeBuffer.readTo(result)
+
+        return result.decodeToString()
+    }
 
     private suspend fun decodeFromString(
         encodedInput: String,
@@ -757,4 +766,23 @@ class RedisMessageTest {
         RedisMessage.parse(
             incoming = ByteReadChannel(encodedInput),
         )
+
+    private class TestChannel : ByteWriteChannel {
+        override val closedCause: Throwable? = null
+        override val isClosedForWrite: Boolean = false
+
+        @InternalAPI
+        override val writeBuffer = Buffer()
+
+        override fun cancel(
+            cause: Throwable?,
+        ) {
+        }
+
+        override suspend fun flush() {
+        }
+
+        override suspend fun flushAndClose() {
+        }
+    }
 }

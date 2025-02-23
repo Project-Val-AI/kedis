@@ -51,4 +51,7 @@ fun KotlinMultiplatformExtension.addNativeTargets(
     macosArm64 {
         block()
     }
+    mingwX64 {
+        block()
+    }
 }

@@ -1,4 +1,3 @@
-import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
 import org.jetbrains.kotlin.konan.target.HostManager
@@ -36,13 +35,12 @@ kotlin {
     withSourcesJar(
         publish = true,
     )
-    @OptIn(ExperimentalKotlinGradlePluginApi::class)
+    jvmToolchain(17)
     compilerOptions {
         freeCompilerArgs.add("-Xexpect-actual-classes")
     }
 
     jvm {
-        jvmToolchain(17)
     }
     addNativeTargets {
     }
@@ -82,17 +80,25 @@ fun KotlinMultiplatformExtension.addNativeTargets(
     macosArm64 {
         block()
     }
+    mingwX64 {
+        block()
+    }
 }
 
-val dokkaOutputDir = "${layout.buildDirectory.get()}/dokka"
-tasks.dokkaHtml {
-    outputDirectory.set(file(dokkaOutputDir))
+val dokkaOutputDir = layout.buildDirectory.dir("dokka")
+dokka {
+    dokkaPublications.html {
+        outputDirectory.set(dokkaOutputDir)
+    }
 }
 val deleteDokkaOutputDir by tasks.register<Delete>("deleteDokkaOutputDirectory") {
-    delete(dokkaOutputDir)
+    this.delete(dokkaOutputDir)
 }
 val javadocJar = tasks.register<Jar>("javadocJar") {
-    dependsOn(deleteDokkaOutputDir, tasks.dokkaHtml)
+    dependsOn(
+        deleteDokkaOutputDir,
+        tasks.getByName("dokkaGeneratePublicationHtml"),
+    )
     archiveClassifier.set("javadoc")
     from(dokkaOutputDir)
 }
@@ -138,11 +144,6 @@ publishing {
             maven {
                 name = "oss"
 
-                // not working:
-//                 val repositoryId = System.getenv("SONATYPE_REPOSITORY_ID")
-//                     ?.trim()
-//                     ?.ifEmpty { null }
-//                     ?: "kedis-staging"
                 val releasesRepoUrl = uri(
                     "https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/",
                 )
@@ -214,6 +215,7 @@ afterEvaluate {
 
                 HostManager.hostIsLinux ->
                     it.name.startsWith("publishLinux")
+                        || it.name.startsWith("publishMingw")
                         || it.name.startsWith("publishJs")
                         || it.name.startsWith("publishJvmPublication")
                         || it.name.startsWith("publishMetadata")

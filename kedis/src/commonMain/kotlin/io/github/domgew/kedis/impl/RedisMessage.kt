@@ -3,6 +3,10 @@ package io.github.domgew.kedis.impl
 import com.ionspin.kotlin.bignum.integer.BigInteger
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.ByteWriteChannel
+import io.ktor.utils.io.readByte
+import io.ktor.utils.io.readFully
+import io.ktor.utils.io.writeByte
+import io.ktor.utils.io.writeFully
 import kotlin.reflect.KClass
 
 internal sealed class RedisMessage {
@@ -503,7 +507,11 @@ internal sealed class RedisMessage {
     }
 
     protected suspend fun ByteWriteChannel.writeFully(arr: ByteArray) {
-        writeFully(arr, 0, arr.size)
+        writeFully(
+            value = arr,
+            startIndex = 0,
+            endIndex = arr.size,
+        )
     }
 
     companion object {
@@ -582,7 +590,12 @@ internal sealed class RedisMessage {
             n: Int,
         ): ByteArray {
             val result = ByteArray(n)
-            incoming.readFully(result, 0, n)
+
+            incoming.readFully(
+                out = result,
+                start = 0,
+                end = n,
+            )
 
             return result
         }

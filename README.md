@@ -52,10 +52,10 @@ See Dokka-generated [docs](https://javadoc.io/doc/io.github.domgew/kedis/latest/
 * Native: Linux ARM64
 * Native: macOS X64
 * Native: macOS ARM64
+* Native: MinGW X64
 
 **Potential Future Targets** (mostly currently no Ktor Network support):
 
-* Native: MinGW X64
 * JS: NodeJS
 * JVM: GraalVM Native
 
