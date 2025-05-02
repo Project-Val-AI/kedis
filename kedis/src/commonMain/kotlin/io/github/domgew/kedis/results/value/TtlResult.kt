@@ -16,11 +16,49 @@ public sealed interface TtlResult {
 
     public data object Never : TtlResult
 
-    public data class InSeconds(
-        val seconds: Long,
-    ) : TtlResult
+    public class InSeconds internal constructor(
+        public val seconds: Long,
+    ) : TtlResult {
 
-    public data class InMilliseconds(
-        val milliseconds: Long,
-    ) : TtlResult
+        override fun equals(
+            other: Any?,
+        ): Boolean {
+            if (this === other)
+                return true
+            if (
+                other == null
+                || other !is InSeconds
+            )
+                return false
+
+            return seconds == other.seconds
+        }
+
+        override fun hashCode(): Int {
+            return seconds.hashCode()
+        }
+    }
+
+    public class InMilliseconds internal constructor(
+        public val milliseconds: Long,
+    ) : TtlResult {
+
+        override fun equals(
+            other: Any?,
+        ): Boolean {
+            if (this === other)
+                return true
+            if (
+                other == null
+                || other !is InMilliseconds
+            )
+                return false
+
+            return milliseconds == other.milliseconds
+        }
+
+        override fun hashCode(): Int {
+            return milliseconds.hashCode()
+        }
+    }
 }
