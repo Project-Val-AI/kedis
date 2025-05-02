@@ -1,4 +1,4 @@
-package io.github.domgew.kedis.arguments
+package io.github.domgew.kedis.arguments.server
 
 public enum class SyncOption {
     SYNC,

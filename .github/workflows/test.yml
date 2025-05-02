@@ -2,18 +2,20 @@ name: Test
 on:
   push:
     branches:
-      - development
+      - "development"
     paths:
       - "kedis/**"
       - "gradle.properties"
       - "gradle/wrapper/**"
       - "gradle/libs.versions.toml"
+      - ".github/workflows/test.yml"
   pull_request:
     paths:
       - "kedis/**"
       - "gradle.properties"
       - "gradle/wrapper/**"
       - "gradle/libs.versions.toml"
+      - ".github/workflows/test.yml"
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -50,10 +52,30 @@ jobs:
           export IS_CI=yes
           export REDIS_PORT=6380
           ./gradlew cleanTest
+          ./gradlew clean
           ./gradlew kedis:smartTest
+      - name: Test reports for Redis 6 on ${{ matrix.os }}
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-${{ github.head_ref }}-${{ github.sha }}-${{ matrix.os }}-redis-6
+          path: |
+            kedis/build/test-results/
+            kedis/build/reports/tests/
+          overwrite: true
       - name: Test with Redis 7 on ${{ matrix.os }}
         run: |
           export IS_CI=yes
           export REDIS_PORT=6381
           ./gradlew cleanTest
+          ./gradlew clean
           ./gradlew kedis:smartTest
+      - name: Test reports for Redis 7 on ${{ matrix.os }}
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-${{ github.head_ref }}-${{ github.sha }}-${{ matrix.os }}-redis-7
+          path: |
+            kedis/build/test-results/
+            kedis/build/reports/tests/
+          overwrite: true

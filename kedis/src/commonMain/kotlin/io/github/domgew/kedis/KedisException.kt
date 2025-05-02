@@ -7,6 +7,7 @@ public sealed class KedisException private constructor(
     /* message = */ message,
     /* cause = */ cause,
 ) {
+
     public class ConnectException(
         cause: Throwable,
     ) : KedisException(

@@ -1,7 +1,7 @@
 package io.github.domgew.kedis.commands.value
 
 import io.github.domgew.kedis.KedisException
-import io.github.domgew.kedis.arguments.SetOptions
+import io.github.domgew.kedis.arguments.value.SetOptions
 import io.github.domgew.kedis.commands.KedisFullCommand
 import io.github.domgew.kedis.impl.RedisMessage
 import io.github.domgew.kedis.results.value.SetBinaryResult

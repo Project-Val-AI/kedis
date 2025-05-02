@@ -14,7 +14,7 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.runBlocking
 
 internal object SocketUtil {
-    @OptIn(ExperimentalStdlibApi::class)
+
     suspend fun <T> withConnectedSocket(
         endpoint: SocketAddress = getDefaultEndpoint(),
         block: suspend SocketContext.() -> T,
@@ -42,12 +42,12 @@ internal object SocketUtil {
         )
     }
 
-    @OptIn(ExperimentalStdlibApi::class)
     class SocketContext(
         val socket: Socket,
         val readChannel: ByteReadChannel,
         val writeChannel: ByteWriteChannel,
     ) : AutoCloseable {
+
         override fun close() {
             runBlocking {
                 socket.dispose()

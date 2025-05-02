@@ -12,6 +12,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 
 class RedisMessageIntegrationTest {
+
     @Test
     fun basicPing() = runTest {
         withContext(Dispatchers.Default) {

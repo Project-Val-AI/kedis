@@ -1,7 +1,9 @@
 import io.github.domgew.kedis.KedisClient
 import io.github.domgew.kedis.KedisConfiguration
-import io.github.domgew.kedis.arguments.SetOptions
-import io.github.domgew.kedis.arguments.SyncOption
+import io.github.domgew.kedis.arguments.server.SyncOption
+import io.github.domgew.kedis.arguments.value.SetOptions
+import io.github.domgew.kedis.commands.KedisServerCommands
+import io.github.domgew.kedis.commands.KedisValueCommands
 import io.github.domgew.kop.KotlinObjectPool
 import io.github.domgew.kop.KotlinObjectPoolConfig
 import io.github.domgew.kop.KotlinObjectPoolStrategy
@@ -22,6 +24,7 @@ import io.ktor.server.routing.routing
 import kotlin.coroutines.coroutineContext
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -48,7 +51,7 @@ fun commonMain() {
                         port = 6379,
                     ),
                     authentication = KedisConfiguration.Authentication.NoAutoAuth,
-                    connectionTimeoutMillis = 250,
+                    connectionTimeout = 250.milliseconds,
                     keepAlive = true,
                 ),
             )
@@ -63,8 +66,16 @@ fun commonMain() {
 
             route("/cache/flush") {
                 post {
-                    kedisPool.withObject {
-                        it.flushAll(sync = SyncOption.SYNC)
+                    kedisPool.withObject { client ->
+                        client.execute(
+                            command = KedisServerCommands.flushAll(
+                                sync = SyncOption.SYNC,
+                            ),
+                        )
+                    }
+
+                    call.respondText {
+                        "Flushed"
                     }
                 }
             }
@@ -75,8 +86,12 @@ fun commonMain() {
                         ?: return@get
 
                     val fromCache = withContext(Dispatchers.IO) {
-                        kedisPool.withObject {
-                            it.get(key)
+                        kedisPool.withObject { client ->
+                            client.execute(
+                                command = KedisValueCommands.get(
+                                    key = key,
+                                ),
+                            )
                         }
                     }
 
@@ -92,13 +107,20 @@ fun commonMain() {
                     val key = call.getParameterOrFail("key")
                         ?: return@post
 
-                    val fromCache = kedisPool.withObject {
-                        it.set(key, call.receiveText())
+                    val fromCache = kedisPool.withObject { client ->
+                        client.execute(
+                            command = KedisValueCommands.set(
+                                key = key,
+                                call.receiveText(),
+                            ),
+                        )
                     }
 
                     call.respondText(
                         status = HttpStatusCode.Accepted,
-                    ) { "Accepted: $fromCache" }
+                    ) {
+                        "Accepted: $fromCache"
+                    }
                 }
 
                 patch {
@@ -139,7 +161,11 @@ private suspend fun KedisClient.getOrCallback(
     }
 
     val valueFromCache = try {
-        get(key)
+        execute(
+            command = KedisValueCommands.get(
+                key = key,
+            ),
+        )
     } catch (th: Throwable) {
         coroutineContext.ensureActive()
         println("KedisClient.getOrCallback: Could not get value from cache: ${th.message}")
@@ -153,14 +179,16 @@ private suspend fun KedisClient.getOrCallback(
     val value = block()
 
     try {
-        set(
-            key = key,
-            value = value,
-            options = SetOptions(
-                previousKeyHandling = SetOptions.PreviousKeyHandling.OVERRIDE,
-                getPreviousValue = false,
-                expire = SetOptions.ExpireOption.ExpiresInMilliseconds(
-                    milliseconds = ttl.inWholeMilliseconds,
+        execute(
+            command = KedisValueCommands.set(
+                key = key,
+                value = value,
+                options = SetOptions(
+                    previousKeyHandling = SetOptions.PreviousKeyHandling.OVERRIDE,
+                    getPreviousValue = false,
+                    expire = SetOptions.ExpireOption.ExpiresInMilliseconds(
+                        milliseconds = ttl.inWholeMilliseconds,
+                    ),
                 ),
             ),
         )

@@ -1,8 +1,10 @@
 package io.github.domgew.kedis
 
-import io.github.domgew.kedis.arguments.InfoSectionName
-import io.github.domgew.kedis.arguments.SetOptions
-import io.github.domgew.kedis.arguments.SyncOption
+import io.github.domgew.kedis.arguments.server.InfoSectionName
+import io.github.domgew.kedis.arguments.server.SyncOption
+import io.github.domgew.kedis.arguments.value.SetOptions
+import io.github.domgew.kedis.commands.KedisServerCommands
+import io.github.domgew.kedis.commands.KedisValueCommands
 import io.github.domgew.kedis.results.server.InfoSection
 import io.github.domgew.kedis.results.value.ExpireTimeResult
 import io.github.domgew.kedis.results.value.SetBinaryResult
@@ -20,6 +22,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -29,23 +32,29 @@ import kotlinx.datetime.Clock
 import net.swiftzer.semver.SemVer
 
 class SimpleE2ETest {
+
     @Test
     fun ping() = runTest {
         withContext(Dispatchers.Default) {
             val pingContent = "_TEST_"
 
-            val client = KedisClient.newClient(
+            val pongMessage = KedisClient.newClient(
                 KedisConfiguration(
                     endpoint = KedisConfiguration.Endpoint.HostPort(
                         host = "127.0.0.1",
                         port = TestConfigUtil.getPort(),
                     ),
                     authentication = KedisConfiguration.Authentication.NoAutoAuth,
-                    connectionTimeoutMillis = 2_000L,
+                    connectionTimeout = 2.seconds,
                 ),
             )
-            val pongMessage = client.ping(pingContent)
-            client.closeSuspended()
+                .use { client ->
+                    client.execute(
+                        command = KedisServerCommands.ping(
+                            content = pingContent,
+                        ),
+                    )
+                }
 
             assertEquals(pingContent, pongMessage)
         }
@@ -59,95 +68,242 @@ class SimpleE2ETest {
             val testKey2 = "test2"
             val testValueBin = Random.nextBytes(384_738)
 
-            val client = KedisClient.newClient(
+            KedisClient.newClient(
                 KedisConfiguration(
                     endpoint = KedisConfiguration.Endpoint.HostPort(
                         host = "127.0.0.1",
                         port = TestConfigUtil.getPort(),
                     ),
                     authentication = KedisConfiguration.Authentication.NoAutoAuth,
-                    connectionTimeoutMillis = 2_000L,
+                    connectionTimeout = 2.seconds,
                 ),
             )
-
-            assertTrue(client.flushAll(sync = SyncOption.SYNC))
-            assertNull(client.get(testKey1))
-            assertNull(client.get(testKey2))
-            assertEquals(0L, client.exists(testKey1, testKey2))
-            assertEquals(SetResult.Ok, client.set(testKey1, testValue))
-            assertEquals(testValue, client.get(testKey1))
-            assertNull(client.get(testKey2))
-            assertEquals(1L, client.exists(testKey1, testKey2))
-            assertEquals(1L, client.del(testKey1, testKey2))
-            assertNull(client.get(testKey1))
-            assertNull(client.get(testKey2))
-            assertEquals(0L, client.exists(testKey1, testKey2))
-            assertNull(client.getBinary(testKey1))
-            assertNull(client.getBinary(testKey2))
-            assertEquals(SetBinaryResult.Ok, client.setBinary(testKey1, testValueBin))
-            assertContentEquals(testValueBin, client.getBinary(testKey1))
-            assertNull(client.getBinary(testKey2))
-            assertEquals(1L, client.exists(testKey1, testKey2))
-            assertEquals(1L, client.del(testKey1))
-            assertEquals(0L, client.exists(testKey1, testKey2))
-            assertEquals(
-                SetResult.Ok,
-                client.set(
-                    key = testKey1,
-                    value = testValue,
-                    options = SetOptions(
-                        previousKeyHandling = SetOptions.PreviousKeyHandling.KEEP_IF_EXISTS,
-                        expire = SetOptions.ExpireOption.ExpiresInMilliseconds(
-                            milliseconds = 60_000L,
+                .use { client ->
+                    assertTrue(
+                        client.execute(
+                            command = KedisServerCommands.flushAll(
+                                sync = SyncOption.SYNC,
+                            ),
                         ),
-                    ),
-                ),
-            )
-            assertEquals(
-                SetResult.Aborted,
-                client.set(
-                    key = testKey1,
-                    value = testValue,
-                    options = SetOptions(
-                        previousKeyHandling = SetOptions.PreviousKeyHandling.KEEP_IF_EXISTS,
-                        expire = SetOptions.ExpireOption.ExpiresInMilliseconds(
-                            milliseconds = 60_000L,
+                    )
+                    assertNull(
+                        client.execute(
+                            command = KedisValueCommands.get(
+                                key = testKey1,
+                            ),
                         ),
-                    ),
-                ),
-            )
-            assertEquals(
-                SetResult.PreviousValue(
-                    value = testValue,
-                ),
-                client.set(
-                    key = testKey1,
-                    value = testValue,
-                    options = SetOptions(
-                        expire = SetOptions.ExpireOption.ExpiresInMilliseconds(
-                            milliseconds = 60_000L,
+                    )
+                    assertNull(
+                        client.execute(
+                            command = KedisValueCommands.get(
+                                key = testKey2,
+                            ),
                         ),
-                        getPreviousValue = true,
-                    ),
-                ),
-            )
-            assertEquals(1L, client.del(testKey1))
-            assertEquals(
-                SetResult.NotFound,
-                client.set(
-                    key = testKey1,
-                    value = testValue,
-                    options = SetOptions(
-                        previousKeyHandling = SetOptions.PreviousKeyHandling.OVERRIDE,
-                        expire = SetOptions.ExpireOption.ExpiresInMilliseconds(
-                            milliseconds = 60_000L,
+                    )
+                    assertEquals(
+                        0L,
+                        client.execute(
+                            command = KedisValueCommands.exists(
+                                key = arrayOf(testKey1, testKey2),
+                            ),
                         ),
-                        getPreviousValue = true,
-                    ),
-                ),
-            )
-
-            client.closeSuspended()
+                    )
+                    assertEquals(
+                        SetResult.Ok,
+                        client.execute(
+                            command = KedisValueCommands.set(
+                                key = testKey1,
+                                value = testValue,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        testValue,
+                        client.execute(
+                            command = KedisValueCommands.get(
+                                key = testKey1,
+                            ),
+                        ),
+                    )
+                    assertNull(
+                        client.execute(
+                            command = KedisValueCommands.get(
+                                key = testKey2,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        1L,
+                        client.execute(
+                            command = KedisValueCommands.exists(
+                                key = arrayOf(testKey1, testKey2),
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        1L,
+                        client.execute(
+                            command = KedisValueCommands.del(
+                                key = arrayOf(testKey1, testKey2),
+                            ),
+                        ),
+                    )
+                    assertNull(
+                        client.execute(
+                            command = KedisValueCommands.get(
+                                key = testKey1,
+                            ),
+                        ),
+                    )
+                    assertNull(
+                        client.execute(
+                            command = KedisValueCommands.get(
+                                key = testKey2,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        0L,
+                        client.execute(
+                            command = KedisValueCommands.exists(
+                                key = arrayOf(testKey1, testKey2),
+                            ),
+                        ),
+                    )
+                    assertNull(
+                        client.execute(
+                            command = KedisValueCommands.getBinary(
+                                key = testKey1,
+                            ),
+                        ),
+                    )
+                    assertNull(
+                        client.execute(
+                            command = KedisValueCommands.getBinary(
+                                key = testKey2,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        SetBinaryResult.Ok,
+                        client.execute(
+                            command = KedisValueCommands.setBinary(
+                                key = testKey1,
+                                value = testValueBin,
+                            ),
+                        ),
+                    )
+                    assertContentEquals(
+                        testValueBin,
+                        client.execute(
+                            command = KedisValueCommands.getBinary(
+                                key = testKey1,
+                            ),
+                        ),
+                    )
+                    assertNull(
+                        client.execute(
+                            command = KedisValueCommands.getBinary(
+                                key = testKey2,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        1L,
+                        client.execute(
+                            command = KedisValueCommands.exists(
+                                key = arrayOf(testKey1, testKey2),
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        1L,
+                        client.execute(
+                            command = KedisValueCommands.del(
+                                key = arrayOf(testKey1),
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        0L,
+                        client.execute(
+                            command = KedisValueCommands.exists(
+                                key = arrayOf(testKey1, testKey2),
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        SetResult.Ok,
+                        client.execute(
+                            command = KedisValueCommands.set(
+                                key = testKey1,
+                                value = testValue,
+                                options = SetOptions(
+                                    previousKeyHandling = SetOptions.PreviousKeyHandling.KEEP_IF_EXISTS,
+                                    expire = SetOptions.ExpireOption.ExpiresInMilliseconds(
+                                        milliseconds = 60_000L,
+                                    ),
+                                ),
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        SetResult.Aborted,
+                        client.execute(
+                            command = KedisValueCommands.set(
+                                key = testKey1,
+                                value = testValue,
+                                options = SetOptions(
+                                    previousKeyHandling = SetOptions.PreviousKeyHandling.KEEP_IF_EXISTS,
+                                    expire = SetOptions.ExpireOption.ExpiresInMilliseconds(
+                                        milliseconds = 60_000L,
+                                    ),
+                                ),
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        SetResult.PreviousValue(
+                            value = testValue,
+                        ),
+                        client.execute(
+                            command = KedisValueCommands.set(
+                                key = testKey1,
+                                value = testValue,
+                                options = SetOptions(
+                                    expire = SetOptions.ExpireOption.ExpiresInMilliseconds(
+                                        milliseconds = 60_000L,
+                                    ),
+                                    getPreviousValue = true,
+                                ),
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        1L,
+                        client.execute(
+                            command = KedisValueCommands.del(
+                                key = arrayOf(testKey1),
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        SetResult.NotFound,
+                        client.execute(
+                            command = KedisValueCommands.set(
+                                key = testKey1,
+                                value = testValue,
+                                options = SetOptions(
+                                    previousKeyHandling = SetOptions.PreviousKeyHandling.OVERRIDE,
+                                    expire = SetOptions.ExpireOption.ExpiresInMilliseconds(
+                                        milliseconds = 60_000L,
+                                    ),
+                                    getPreviousValue = true,
+                                ),
+                            ),
+                        ),
+                    )
+                }
         }
     }
 
@@ -156,87 +312,116 @@ class SimpleE2ETest {
         withContext(Dispatchers.Default) {
             val testKey1 = "test1"
             val testValue = "testValue1"
-            var result: ExpireTimeResult
 
-            val client = KedisClient.newClient(
+            KedisClient.newClient(
                 KedisConfiguration(
                     endpoint = KedisConfiguration.Endpoint.HostPort(
                         host = "127.0.0.1",
                         port = TestConfigUtil.getPort(),
                     ),
                     authentication = KedisConfiguration.Authentication.NoAutoAuth,
-                    connectionTimeoutMillis = 2_000L,
+                    connectionTimeout = 2.seconds,
                 ),
             )
+                .use { client ->
 
-            assertTrue(client.flushAll(sync = SyncOption.SYNC))
+                    assertTrue(
+                        client.execute(
+                            command = KedisServerCommands.flushAll(
+                                sync = SyncOption.SYNC,
+                            ),
+                        ),
+                    )
 
-            val redisVersion = client.getRedisVersion()
-                ?: return@withContext
+                    val redisVersion = client.getRedisVersion()
+                        ?: return@withContext
 
-            if (redisVersion < SemVer.parse("7.0.0")) {
-                return@withContext
-            }
+                    if (redisVersion < SemVer.parse("7.0.0")) {
+                        return@withContext
+                    }
 
-            assertNull(client.get(testKey1))
-            assertEquals(
-                ExpireTimeResult.NotFound,
-                client.expireTime(testKey1),
-            )
+                    assertNull(
+                        client.execute(
+                            command = KedisValueCommands.get(
+                                key = testKey1,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        ExpireTimeResult.NotFound,
+                        client.execute(
+                            command = KedisValueCommands.expireTime(
+                                key = testKey1,
+                            ),
+                        ),
+                    )
 
-            client.set(
-                key = testKey1,
-                value = testValue,
-            )
-            assertEquals(
-                ExpireTimeResult.Never,
-                client.expireTime(testKey1),
-            )
+                    client.execute(
+                        command = KedisValueCommands.set(
+                            key = testKey1,
+                            value = testValue,
+                        ),
+                    )
+                    assertEquals(
+                        ExpireTimeResult.Never,
+                        client.execute(
+                            command = KedisValueCommands.expireTime(
+                                key = testKey1,
+                            ),
+                        ),
+                    )
 
-            // SECONDS
+                    // SECONDS
 
-            val atSeconds = Clock.System.now().epochSeconds + 31
+                    val atSeconds = Clock.System.now().epochSeconds + 31
 
-            client.set(
-                key = testKey1,
-                value = testValue,
-                options = SetOptions(
-                    expire = SetOptions.ExpireOption.ExpiresAtUnixEpochSecond(
-                        unixEpochSecond = atSeconds,
-                    ),
-                ),
-            )
-            result = client.expireTime(
-                key = testKey1,
-                inMilliseconds = false,
-            )
+                    client.execute(
+                        command = KedisValueCommands.set(
+                            key = testKey1,
+                            value = testValue,
+                            options = SetOptions(
+                                expire = SetOptions.ExpireOption.ExpiresAtUnixEpochSecond(
+                                    unixEpochSecond = atSeconds,
+                                ),
+                            ),
+                        ),
+                    )
+                    var result: ExpireTimeResult = client.execute(
+                        command = KedisValueCommands.expireTime(
+                            key = testKey1,
+                            inMilliseconds = false,
+                        ),
+                    )
 
-            assertIs<ExpireTimeResult.AtUnixSecond>(result)
-            assertEquals(atSeconds, result.seconds)
+                    assertIs<ExpireTimeResult.AtUnixSecond>(result)
+                    assertEquals(atSeconds, result.seconds)
 
-            // MILLISECONDS
+                    // MILLISECONDS
 
-            val atMilliseconds = Clock.System.now()
-                .toEpochMilliseconds() + 31_000
+                    val atMilliseconds = Clock.System.now()
+                        .toEpochMilliseconds() + 31_000
 
-            client.set(
-                key = testKey1,
-                value = testValue,
-                options = SetOptions(
-                    expire = SetOptions.ExpireOption.ExpiresAtUnixEpochMillisecond(
-                        unixEpochMillisecond = atMilliseconds,
-                    ),
-                ),
-            )
-            result = client.expireTime(
-                key = testKey1,
-                inMilliseconds = true,
-            )
+                    client.execute(
+                        command = KedisValueCommands.set(
+                            key = testKey1,
+                            value = testValue,
+                            options = SetOptions(
+                                expire = SetOptions.ExpireOption.ExpiresAtUnixEpochMillisecond(
+                                    unixEpochMillisecond = atMilliseconds,
+                                ),
+                            ),
+                        ),
+                    )
+                    result = client.execute(
+                        command = KedisValueCommands.expireTime(
+                            key = testKey1,
+                            inMilliseconds = true,
+                        ),
+                    )
 
-            assertIs<ExpireTimeResult.AtUnixMillisecond>(result)
-            assertEquals(atMilliseconds, result.milliseconds)
-
-            client.closeSuspended()
+                    assertIs<ExpireTimeResult.AtUnixMillisecond>(result)
+                    assertEquals(atMilliseconds, result.milliseconds)
+                }
         }
     }
 
@@ -247,191 +432,235 @@ class SimpleE2ETest {
             val testValue = "testValue1"
             val timeSource = TimeSource.Monotonic
 
-            @Suppress("JoinDeclarationAndAssignment")
-            var markBefore: TimeSource.Monotonic.ValueTimeMark
-
-            @Suppress("JoinDeclarationAndAssignment")
-            var markAfter: TimeSource.Monotonic.ValueTimeMark
-
-            @Suppress("JoinDeclarationAndAssignment")
-            var timeTaken: Long
-            var ttlResult: TtlResult
-
-            val client = KedisClient.newClient(
+            KedisClient.newClient(
                 KedisConfiguration(
                     endpoint = KedisConfiguration.Endpoint.HostPort(
                         host = "127.0.0.1",
                         port = TestConfigUtil.getPort(),
                     ),
                     authentication = KedisConfiguration.Authentication.NoAutoAuth,
-                    connectionTimeoutMillis = 2_000L,
+                    connectionTimeout = 2.seconds,
                 ),
             )
+                .use { client ->
+                    @Suppress("JoinDeclarationAndAssignment")
+                    var markBefore: TimeSource.Monotonic.ValueTimeMark
 
-            assertTrue(client.flushAll(sync = SyncOption.SYNC))
-            assertNull(client.get(testKey1))
+                    @Suppress("JoinDeclarationAndAssignment")
+                    var markAfter: TimeSource.Monotonic.ValueTimeMark
 
-            assertEquals(
-                TtlResult.NotFound,
-                client.ttl(testKey1),
-            )
-            client.set(
-                key = testKey1,
-                value = testValue,
-            )
-            assertEquals(
-                TtlResult.Never,
-                client.ttl(testKey1),
-            )
+                    @Suppress("JoinDeclarationAndAssignment")
+                    var timeTaken: Long
 
-            // IN SECONDS
+                    assertTrue(
+                        client.execute(
+                            command = KedisServerCommands.flushAll(
+                                sync = SyncOption.SYNC,
+                            ),
+                        ),
+                    )
+                    assertNull(
+                        client.execute(
+                            command = KedisValueCommands.get(
+                                key = testKey1,
+                            ),
+                        ),
+                    )
 
-            val ttlSeconds = 30L
-            markBefore = timeSource.markNow()
-            client.set(
-                key = testKey1,
-                value = testValue,
-                options = SetOptions(
-                    expire = SetOptions.ExpireOption.ExpiresInSeconds(
-                        seconds = ttlSeconds,
-                    ),
-                ),
-            )
-            ttlResult = client.ttl(
-                key = testKey1,
-                inMilliseconds = false,
-            )
-            markAfter = timeSource.markNow()
-            timeTaken = (markAfter - markBefore).inWholeMilliseconds + 1
+                    assertEquals(
+                        TtlResult.NotFound,
+                        client.execute(
+                            command = KedisValueCommands.ttl(
+                                key = testKey1,
+                            ),
+                        ),
+                    )
+                    client.execute(
+                        command = KedisValueCommands.set(
+                            key = testKey1,
+                            value = testValue,
+                        ),
+                    )
+                    assertEquals(
+                        TtlResult.Never,
+                        client.execute(
+                            command = KedisValueCommands.ttl(
+                                key = testKey1,
+                            ),
+                        ),
+                    )
 
-            assertIs<TtlResult.InSeconds>(ttlResult)
-            assertContains(
-                range = (ttlSeconds - timeTaken / 1000 - 1)..ttlSeconds,
-                value = ttlResult.seconds,
-            )
+                    // IN SECONDS
 
-            // IN MILLISECONDS
+                    val ttlSeconds = 30L
+                    markBefore = timeSource.markNow()
+                    client.execute(
+                        command = KedisValueCommands.set(
+                            key = testKey1,
+                            value = testValue,
+                            options = SetOptions(
+                                expire = SetOptions.ExpireOption.ExpiresInSeconds(
+                                    seconds = ttlSeconds,
+                                ),
+                            ),
+                        ),
+                    )
+                    var ttlResult: TtlResult = client.execute(
+                        command = KedisValueCommands.ttl(
+                            key = testKey1,
+                            inMilliseconds = false,
+                        ),
+                    )
+                    markAfter = timeSource.markNow()
+                    timeTaken = (markAfter - markBefore).inWholeMilliseconds + 1
 
-            val ttlMilliseconds = 30_000L
-            markBefore = timeSource.markNow()
-            client.set(
-                key = testKey1,
-                value = testValue,
-                options = SetOptions(
-                    expire = SetOptions.ExpireOption.ExpiresInMilliseconds(
-                        milliseconds = ttlMilliseconds,
-                    ),
-                ),
-            )
-            ttlResult = client.ttl(
-                key = testKey1,
-                inMilliseconds = true,
-            )
-            markAfter = timeSource.markNow()
-            timeTaken = (markAfter - markBefore).inWholeMilliseconds + 1
+                    assertIs<TtlResult.InSeconds>(ttlResult)
+                    assertContains(
+                        range = (ttlSeconds - timeTaken / 1000 - 1)..ttlSeconds,
+                        value = ttlResult.seconds,
+                    )
 
-            assertIs<TtlResult.InMilliseconds>(ttlResult)
-            assertContains(
-                range = (ttlMilliseconds - timeTaken)..ttlMilliseconds,
-                value = ttlResult.milliseconds,
-            )
+                    // IN MILLISECONDS
 
-            // AT SECONDS
+                    val ttlMilliseconds = 30_000L
+                    markBefore = timeSource.markNow()
+                    client.execute(
+                        command = KedisValueCommands.set(
+                            key = testKey1,
+                            value = testValue,
+                            options = SetOptions(
+                                expire = SetOptions.ExpireOption.ExpiresInMilliseconds(
+                                    milliseconds = ttlMilliseconds,
+                                ),
+                            ),
+                        ),
+                    )
+                    ttlResult = client.execute(
+                        command = KedisValueCommands.ttl(
+                            key = testKey1,
+                            inMilliseconds = true,
+                        ),
+                    )
+                    markAfter = timeSource.markNow()
+                    timeTaken = (markAfter - markBefore).inWholeMilliseconds + 1
 
-            val atSecond = Clock.System.now().epochSeconds + ttlSeconds
-            markBefore = timeSource.markNow()
-            client.set(
-                key = testKey1,
-                value = testValue,
-                options = SetOptions(
-                    expire = SetOptions.ExpireOption.ExpiresAtUnixEpochSecond(
-                        unixEpochSecond = atSecond,
-                    ),
-                ),
-            )
-            ttlResult = client.ttl(
-                key = testKey1,
-                inMilliseconds = false,
-            )
-            markAfter = timeSource.markNow()
-            timeTaken = (markAfter - markBefore).inWholeMilliseconds + 1
+                    assertIs<TtlResult.InMilliseconds>(ttlResult)
+                    assertContains(
+                        range = (ttlMilliseconds - timeTaken)..ttlMilliseconds,
+                        value = ttlResult.milliseconds,
+                    )
 
-            assertIs<TtlResult.InSeconds>(ttlResult)
-            assertContains(
-                range = (ttlSeconds - timeTaken / 1000 - 1)..ttlSeconds,
-                value = ttlResult.seconds,
-            )
+                    // AT SECONDS
 
-            // AT MILLISECONDS
+                    val atSecond = Clock.System.now().epochSeconds + ttlSeconds
+                    markBefore = timeSource.markNow()
+                    client.execute(
+                        command = KedisValueCommands.set(
+                            key = testKey1,
+                            value = testValue,
+                            options = SetOptions(
+                                expire = SetOptions.ExpireOption.ExpiresAtUnixEpochSecond(
+                                    unixEpochSecond = atSecond,
+                                ),
+                            ),
+                        ),
+                    )
+                    ttlResult = client.execute(
+                        command = KedisValueCommands.ttl(
+                            key = testKey1,
+                            inMilliseconds = false,
+                        ),
+                    )
+                    markAfter = timeSource.markNow()
+                    timeTaken = (markAfter - markBefore).inWholeMilliseconds + 1
 
-            val atMillisecond = Clock.System.now()
-                .toEpochMilliseconds() + ttlMilliseconds
-            markBefore = timeSource.markNow()
-            client.set(
-                key = testKey1,
-                value = testValue,
-                options = SetOptions(
-                    expire = SetOptions.ExpireOption.ExpiresAtUnixEpochMillisecond(
-                        unixEpochMillisecond = atMillisecond,
-                    ),
-                ),
-            )
-            ttlResult = client.ttl(
-                key = testKey1,
-                inMilliseconds = true,
-            )
-            markAfter = timeSource.markNow()
-            timeTaken = (markAfter - markBefore).inWholeMilliseconds + 1
+                    assertIs<TtlResult.InSeconds>(ttlResult)
+                    assertContains(
+                        range = (ttlSeconds - timeTaken / 1000 - 1)..ttlSeconds,
+                        value = ttlResult.seconds,
+                    )
 
-            assertIs<TtlResult.InMilliseconds>(ttlResult)
-            assertContains(
-                range = (ttlMilliseconds - timeTaken)..ttlMilliseconds,
-                value = ttlResult.milliseconds,
-            )
+                    // AT MILLISECONDS
 
-            val delay = 1_000L
-            delay(delay)
+                    val atMillisecond = Clock.System.now()
+                        .toEpochMilliseconds() + ttlMilliseconds
+                    markBefore = timeSource.markNow()
+                    client.execute(
+                        command = KedisValueCommands.set(
+                            key = testKey1,
+                            value = testValue,
+                            options = SetOptions(
+                                expire = SetOptions.ExpireOption.ExpiresAtUnixEpochMillisecond(
+                                    unixEpochMillisecond = atMillisecond,
+                                ),
+                            ),
+                        ),
+                    )
+                    ttlResult = client.execute(
+                        command = KedisValueCommands.ttl(
+                            key = testKey1,
+                            inMilliseconds = true,
+                        ),
+                    )
+                    markAfter = timeSource.markNow()
+                    timeTaken = (markAfter - markBefore).inWholeMilliseconds + 1
 
-            client.set(
-                key = testKey1,
-                value = testValue,
-                options = SetOptions(
-                    expire = SetOptions.ExpireOption.KeepPreviousTTL,
-                ),
-            )
-            ttlResult = client.ttl(
-                key = testKey1,
-                inMilliseconds = true,
-            )
-            markAfter = timeSource.markNow()
-            timeTaken = (markAfter - markBefore).inWholeMilliseconds + 1
+                    assertIs<TtlResult.InMilliseconds>(ttlResult)
+                    assertContains(
+                        range = (ttlMilliseconds - timeTaken)..ttlMilliseconds,
+                        value = ttlResult.milliseconds,
+                    )
 
-            assertIs<TtlResult.InMilliseconds>(ttlResult)
-            assertContains(
-                range = (ttlMilliseconds - timeTaken)..(ttlMilliseconds - delay),
-                value = ttlResult.milliseconds,
-            )
+                    val delay = 1_000L
+                    delay(delay)
 
-            client.closeSuspended()
+                    client.execute(
+                        command = KedisValueCommands.set(
+                            key = testKey1,
+                            value = testValue,
+                            options = SetOptions(
+                                expire = SetOptions.ExpireOption.KeepPreviousTTL,
+                            ),
+                        ),
+                    )
+                    ttlResult = client.execute(
+                        command = KedisValueCommands.ttl(
+                            key = testKey1,
+                            inMilliseconds = true,
+                        ),
+                    )
+                    markAfter = timeSource.markNow()
+                    timeTaken = (markAfter - markBefore).inWholeMilliseconds + 1
+
+                    assertIs<TtlResult.InMilliseconds>(ttlResult)
+                    assertContains(
+                        range = (ttlMilliseconds - timeTaken)..(ttlMilliseconds - delay),
+                        value = ttlResult.milliseconds,
+                    )
+                }
         }
     }
 
     @Test
     fun infoServer() = runTest {
         withContext(Dispatchers.Default) {
-            val client = KedisClient.newClient(
+            val infoList = KedisClient.newClient(
                 KedisConfiguration(
                     endpoint = KedisConfiguration.Endpoint.HostPort(
                         host = "127.0.0.1",
                         port = TestConfigUtil.getPort(),
                     ),
                     authentication = KedisConfiguration.Authentication.NoAutoAuth,
-                    connectionTimeoutMillis = 2_000L,
+                    connectionTimeout = 2.seconds,
                 ),
             )
-
-            val infoList = client.info(InfoSectionName.SERVER)
-            client.closeSuspended()
+                .use { client ->
+                    client.execute(
+                        command = KedisServerCommands.info(
+                            section = arrayOf(InfoSectionName.SERVER),
+                        ),
+                    )
+                }
 
             assertEquals(1, infoList.size)
 
@@ -441,8 +670,6 @@ class SimpleE2ETest {
             assertNotNull(serverInfo.os)
             assertNotNull(serverInfo.processId)
             assertNotNull(serverInfo.redisVersion)
-
-            client.closeSuspended()
         }
     }
 
@@ -453,79 +680,310 @@ class SimpleE2ETest {
             val intKey = "testKeyInt"
             val strKey = "testKeyStr"
 
-            val client = KedisClient.newClient(
+            KedisClient.newClient(
                 KedisConfiguration(
                     endpoint = KedisConfiguration.Endpoint.HostPort(
                         host = "127.0.0.1",
                         port = TestConfigUtil.getPort(),
                     ),
                     authentication = KedisConfiguration.Authentication.NoAutoAuth,
-                    connectionTimeoutMillis = 2_000L,
+                    connectionTimeout = 2.seconds,
                 ),
             )
-
-            assertTrue(client.flushAll(sync = SyncOption.SYNC))
-            assertNull(client.get(intKey))
-            assertEquals(1, client.incr(intKey))
-            assertEquals(0, client.decr(intKey))
-            assertEquals(-1, client.decr(intKey))
-            assertEquals(0, client.incr(intKey))
-            assertEquals(5, client.incrBy(intKey, 5))
-            assertEquals(7, client.incrBy(intKey, 2))
-            assertEquals(1, client.decrBy(intKey, 6))
-            assertNull(client.get(floatKey))
-            assertEquals(2.65, client.incrByFloat(floatKey, 2.65))
-            assertEquals(2.63, client.incrByFloat(floatKey, -0.02))
-            assertEquals(3.15, client.incrByFloat(floatKey, 0.52))
-            assertEquals(1.52, client.incrByFloat(intKey, 0.52))
-            assertNull(client.get(strKey))
-            assertEquals(0, client.strLen(strKey))
-            assertEquals("", client.getRange(strKey, 0, 5))
-            assertEquals("", client.getRange(strKey, 0L..5L))
-            assertEquals(4, client.append(strKey, "test"))
-            assertEquals(4, client.strLen(strKey))
-            assertEquals("test", client.get(strKey))
-            assertEquals("test", client.getRange(strKey, 0, 5))
-            assertEquals("test", client.getRange(strKey, 0L..5L))
-            assertEquals(8, client.append(strKey, "Test"))
-            assertEquals(8, client.strLen(strKey))
-            assertEquals("testTest", client.get(strKey))
-            assertEquals("testTe", client.getRange(strKey, 0, 5))
-            assertEquals("testTest".slice(0..5), client.getRange(strKey, 0L..5L))
-            assertEquals("testTest".slice(0 until 5), client.getRange(strKey, 0L until 5L))
-            assertFailsWith<KedisException.RedisErrorResponseException> {
-                client.incrByFloat(strKey, 0.5)
-            }
-
-            client.closeSuspended()
+                .use { client ->
+                    assertTrue(
+                        client.execute(
+                            command = KedisServerCommands.flushAll(
+                                sync = SyncOption.SYNC,
+                            ),
+                        ),
+                    )
+                    assertNull(
+                        client.execute(
+                            command = KedisValueCommands.get(
+                                key = intKey,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        1,
+                        client.execute(
+                            command = KedisValueCommands.incr(
+                                key = intKey,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        0,
+                        client.execute(
+                            command = KedisValueCommands.decr(
+                                key = intKey,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        -1,
+                        client.execute(
+                            command = KedisValueCommands.decr(
+                                key = intKey,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        0,
+                        client.execute(
+                            command = KedisValueCommands.incr(
+                                key = intKey,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        5,
+                        client.execute(
+                            command = KedisValueCommands.incrBy(
+                                key = intKey,
+                                by = 5,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        7,
+                        client.execute(
+                            command = KedisValueCommands.incrBy(
+                                key = intKey,
+                                by = 2,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        1,
+                        client.execute(
+                            command = KedisValueCommands.decrBy(
+                                key = intKey,
+                                by = 6,
+                            ),
+                        ),
+                    )
+                    assertNull(
+                        client.execute(
+                            command = KedisValueCommands.get(
+                                key = floatKey,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        2.65,
+                        client.execute(
+                            command = KedisValueCommands.incrByFloat(
+                                key = floatKey,
+                                by = 2.65,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        2.63,
+                        client.execute(
+                            command = KedisValueCommands.incrByFloat(
+                                key = floatKey,
+                                by = -0.02,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        3.15,
+                        client.execute(
+                            command = KedisValueCommands.incrByFloat(
+                                key = floatKey,
+                                by = 0.52,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        1.52,
+                        client.execute(
+                            command = KedisValueCommands.incrByFloat(
+                                key = intKey,
+                                by = 0.52,
+                            ),
+                        ),
+                    )
+                    assertNull(
+                        client.execute(
+                            command = KedisValueCommands.get(
+                                key = strKey,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        0,
+                        client.execute(
+                            command = KedisValueCommands.strLen(
+                                key = strKey,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        "",
+                        client.execute(
+                            command = KedisValueCommands.getRange(
+                                key = strKey,
+                                start = 0,
+                                end = 5,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        "",
+                        client.execute(
+                            command = KedisValueCommands.getRange(
+                                key = strKey,
+                                range = 0L..5L,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        4,
+                        client.execute(
+                            command = KedisValueCommands.append(
+                                key = strKey,
+                                value = "test",
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        4,
+                        client.execute(
+                            command = KedisValueCommands.strLen(
+                                key = strKey,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        "test",
+                        client.execute(
+                            command = KedisValueCommands.get(
+                                key = strKey,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        "test",
+                        client.execute(
+                            command = KedisValueCommands.getRange(
+                                key = strKey,
+                                start = 0,
+                                end = 5,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        "test",
+                        client.execute(
+                            command = KedisValueCommands.getRange(
+                                key = strKey,
+                                range = 0L..5L,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        8,
+                        client.execute(
+                            command = KedisValueCommands.append(
+                                key = strKey,
+                                value = "Test",
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        8,
+                        client.execute(
+                            command = KedisValueCommands.strLen(
+                                key = strKey,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        "testTest",
+                        client.execute(
+                            command = KedisValueCommands.get(
+                                key = strKey,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        "testTe",
+                        client.execute(
+                            command = KedisValueCommands.getRange(
+                                key = strKey,
+                                start = 0,
+                                end = 5,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        "testTest".slice(0..5),
+                        client.execute(
+                            command = KedisValueCommands.getRange(
+                                key = strKey,
+                                range = 0L..5L,
+                            ),
+                        ),
+                    )
+                    assertEquals(
+                        "testTest".slice(0 until 5),
+                        client.execute(
+                            command = KedisValueCommands.getRange(
+                                key = strKey,
+                                range = 0L until 5L,
+                            ),
+                        ),
+                    )
+                    assertFailsWith<KedisException.RedisErrorResponseException> {
+                        client.execute(
+                            command = KedisValueCommands.incrByFloat(
+                                key = strKey,
+                                by = 0.5,
+                            ),
+                        )
+                    }
+                }
         }
     }
 
     @Test
     fun bgSave() = runTest {
         withContext(Dispatchers.Default) {
-            val client = KedisClient.newClient(
+            KedisClient.newClient(
                 KedisConfiguration(
                     endpoint = KedisConfiguration.Endpoint.HostPort(
                         host = "127.0.0.1",
                         port = TestConfigUtil.getPort(),
                     ),
                     authentication = KedisConfiguration.Authentication.NoAutoAuth,
-                    connectionTimeoutMillis = 2_000L,
+                    connectionTimeout = 2.seconds,
                 ),
             )
+                .use { client ->
+                    assertTrue(
+                        client.execute(
+                            command = KedisServerCommands.flushAll(
+                                sync = SyncOption.SYNC,
+                            ),
+                        ),
+                    )
 
-            assertTrue(client.flushAll(sync = SyncOption.SYNC))
-
-            client.bgSave(
-                schedule = false,
-            )
-            delay(1_000)
-            client.bgSave(
-                schedule = true,
-            )
-
-            client.closeSuspended()
+                    client.execute(
+                        command = KedisServerCommands.bgSave(
+                            schedule = false,
+                        ),
+                    )
+                    delay(1_000)
+                    client.execute(
+                        command = KedisServerCommands.bgSave(
+                            schedule = true,
+                        ),
+                    )
+                }
         }
     }
 }

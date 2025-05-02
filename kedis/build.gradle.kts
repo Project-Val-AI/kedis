@@ -90,6 +90,15 @@ dokka {
     dokkaPublications.html {
         outputDirectory.set(dokkaOutputDir)
     }
+
+    dokkaSourceSets {
+        getByName("commonMain") {
+            samples.from(
+                project.files(),
+                project.files("src/commonTest/kotlin"),
+            )
+        }
+    }
 }
 val deleteDokkaOutputDir by tasks.register<Delete>("deleteDokkaOutputDirectory") {
     this.delete(dokkaOutputDir)

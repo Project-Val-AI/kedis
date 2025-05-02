@@ -1,7 +1,7 @@
 package io.github.domgew.kedis.commands.server
 
 import io.github.domgew.kedis.KedisException
-import io.github.domgew.kedis.arguments.InfoSectionName
+import io.github.domgew.kedis.arguments.server.InfoSectionName
 import io.github.domgew.kedis.commands.KedisFullCommand
 import io.github.domgew.kedis.impl.RedisMessage
 import io.github.domgew.kedis.results.server.InfoSection

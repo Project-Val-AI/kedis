@@ -1,6 +1,5 @@
-package io.github.domgew.kedis.arguments
+package io.github.domgew.kedis.arguments.value
 
-import io.github.domgew.kedis.arguments.SetOptions.PreviousKeyHandling
 import io.github.domgew.kedis.impl.RedisMessage
 
 public data class SetOptions(

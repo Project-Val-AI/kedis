@@ -5,6 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
 object RedisUtil {
+
     internal suspend fun createUser(
         username: String,
         password: String,

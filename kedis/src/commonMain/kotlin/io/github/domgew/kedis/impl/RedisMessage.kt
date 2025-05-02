@@ -10,12 +10,17 @@ import io.ktor.utils.io.writeFully
 import kotlin.reflect.KClass
 
 internal sealed class RedisMessage {
-    abstract suspend fun writeTo(outgoing: ByteWriteChannel)
+
+    abstract suspend fun writeTo(
+        outgoing: ByteWriteChannel,
+    )
 
     class ParsingException(
         message: String,
         type: KClass<*>,
-    ) : Exception("Could not parse ${type.simpleName}: $message")
+    ) : Exception(
+        "Could not parse ${type.simpleName}: $message",
+    )
 
     data class SimpleStringMessage(
         override val value: String,

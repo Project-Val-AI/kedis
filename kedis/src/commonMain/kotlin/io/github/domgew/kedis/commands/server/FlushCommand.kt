@@ -1,6 +1,6 @@
 package io.github.domgew.kedis.commands.server
 
-import io.github.domgew.kedis.arguments.SyncOption
+import io.github.domgew.kedis.arguments.server.SyncOption
 import io.github.domgew.kedis.commands.KedisFullCommand
 import io.github.domgew.kedis.impl.RedisMessage
 

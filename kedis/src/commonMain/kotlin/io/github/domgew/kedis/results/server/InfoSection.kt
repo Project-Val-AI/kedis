@@ -1,6 +1,6 @@
 package io.github.domgew.kedis.results.server
 
-import io.github.domgew.kedis.arguments.InfoSectionName
+import io.github.domgew.kedis.arguments.server.InfoSectionName
 
 /**
  * The info section returned by the info command.

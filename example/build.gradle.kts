@@ -8,6 +8,9 @@ plugins {
 kotlin {
     jvm {
         withJava()
+        mainRun {
+            mainClass.set("MainKt")
+        }
     }
     addNativeTargets {
         binaries {

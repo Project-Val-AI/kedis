@@ -5,6 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
 class InfoSectionTest {
+
     @Test
     fun testServerSection() {
         val input = """

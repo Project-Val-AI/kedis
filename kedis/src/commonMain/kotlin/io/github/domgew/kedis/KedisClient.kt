@@ -1,8 +1,14 @@
 package io.github.domgew.kedis
 
-import io.github.domgew.kedis.arguments.InfoSectionName
-import io.github.domgew.kedis.arguments.SetOptions
-import io.github.domgew.kedis.arguments.SyncOption
+import io.github.domgew.kedis.KedisClient.Companion.invoke
+import io.github.domgew.kedis.KedisClient.Companion.newClient
+import io.github.domgew.kedis.arguments.server.InfoSectionName
+import io.github.domgew.kedis.arguments.server.SyncOption
+import io.github.domgew.kedis.arguments.value.SetOptions
+import io.github.domgew.kedis.commands.KedisCommand
+import io.github.domgew.kedis.commands.KedisHashCommands
+import io.github.domgew.kedis.commands.KedisServerCommands
+import io.github.domgew.kedis.commands.KedisValueCommands
 import io.github.domgew.kedis.impl.DefaultKedisClient
 import io.github.domgew.kedis.results.server.BgSaveResult
 import io.github.domgew.kedis.results.server.InfoSection
@@ -10,32 +16,63 @@ import io.github.domgew.kedis.results.value.ExpireTimeResult
 import io.github.domgew.kedis.results.value.SetBinaryResult
 import io.github.domgew.kedis.results.value.SetResult
 import io.github.domgew.kedis.results.value.TtlResult
+import io.ktor.network.selector.SelectorManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 
 /**
- * The public interface of the client. It contains all available commands. Use [KedisClient.newClient] to create an instance.
- * @see [KedisClient.newClient]
+ * The public interface of the client.
+ * Use [KedisClient.newClient] or [KedisClient.invoke] to create an instance.
+ * See [io.github.domgew.kedis.commands] for available commands.
+ *
+ * @see KedisClient.newClient
+ * @see KedisClient.invoke
+ * @see io.github.domgew.kedis.commands
  */
-@OptIn(ExperimentalStdlibApi::class)
 public interface KedisClient : AutoCloseable {
+
     public companion object {
+
         /**
          * Creates a new client instance without connecting.
          *
-         * When you connect the client, make sure to disconnect it again. Each command (method) will connect automatically, when the connection is not already open.
+         * When you connect the client, make sure to disconnect/[close] it again.
+         * Each command (method) will connect automatically, when the connection is not already open.
+         *
+         * @see invoke
          */
         public fun newClient(
             configuration: KedisConfiguration,
-        ): KedisClient {
-            return DefaultKedisClient(
+        ): KedisClient =
+            newClient(
                 configuration = configuration,
+                selectorManager = SelectorManager(
+                    Dispatchers.IO,
+                ),
             )
-        }
 
+        /**
+         * Creates a new client instance without connecting.
+         *
+         * When you connect the client, make sure to disconnect/[close] it again.
+         * Each command (method) will connect automatically, when the connection is not already open.
+         *
+         * @see newClient
+         */
         public operator fun invoke(
             configuration: KedisConfiguration,
         ): KedisClient =
             newClient(
                 configuration = configuration,
+            )
+
+        internal fun newClient(
+            configuration: KedisConfiguration,
+            selectorManager: SelectorManager,
+        ) =
+            DefaultKedisClient(
+                configuration = configuration,
+                selectorManager = selectorManager,
             )
     }
 
@@ -45,427 +82,930 @@ public interface KedisClient : AutoCloseable {
     public val isConnected: Boolean
 
     /**
+     * Checks whether the client has a connection to the server and the connection reports to be active.
+     */
+    public val probablyConnected: Boolean
+
+    /**
      * Manually ensures that the client is connected. When [isConnected] is true, nothing happens, otherwise the connection is established.
      */
     public suspend fun connect()
 
     /**
+     * Executes the given [command] and returns its result.
+     * For available commands see [io.github.domgew.kedis.commands].
+     *
+     * @return The command's result
+     * @see [io.github.domgew.kedis.commands]
+     */
+    public suspend fun <T> execute(
+        command: KedisCommand<T>,
+    ): T
+
+    /**
+     * Creates a [KedisPipelineClient] that uses the same underlying connection.
+     *
+     * It does not block this client until [KedisPipelineClient.execute] is called.
+     *
+     * [https://redis.io/docs/latest/develop/use/pipelining/](https://redis.io/docs/latest/develop/use/pipelining/)
+     * @return The pipelined client
+     * @see KedisPipelineClient
+     * @sample io.github.domgew.kedis.samples.PipelineSamples.simple
+     */
+    public fun pipelined(): KedisPipelineClient
+
+    /**
      * Closes the connection to the server.
      */
-    public suspend fun closeSuspended()
+    @Deprecated(
+        message = "Not suspending anymore",
+        replaceWith = ReplaceWith(
+            expression = "close()",
+        ),
+    )
+    public suspend fun closeSuspended() {
+        close()
+    }
 
     /**
-     * Sends a message ([content]) to the server which should be returned unchanged (e.g. result should equal [content]).
-     *
-     * [https://redis.io/commands/ping/](https://redis.io/commands/ping/)
-     * @return The response from the Redis server - should be [content]
+     * @see [KedisServerCommands.ping]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisServerCommands.ping(\n" +
+                "        content = content,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisServerCommands",
+        ),
+    )
     public suspend fun ping(
         content: String = "PING",
-    ): String
+    ): String =
+        execute(
+            command = KedisServerCommands.ping(
+                content = content,
+            ),
+        )
 
     /**
-     * Authenticates the connection to the server or throws an exception when it failed.
-     *
-     * [https://redis.io/commands/auth/](https://redis.io/commands/auth/)
+     * @see [KedisServerCommands.auth]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisServerCommands.auth(\n" +
+                "        password = password,\n" +
+                "        username = username,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisServerCommands",
+        ),
+    )
     public suspend fun auth(
         password: String,
         username: String? = null,
+    ): Unit =
+        execute(
+            command = KedisServerCommands.auth(
+                password = password,
+                username = username,
+            ),
+        )
+
+    /**
+     * @see [KedisServerCommands.whoAmI]
+     */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisServerCommands.whoAmI(),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisServerCommands",
+        ),
     )
+    public suspend fun whoAmI(): String =
+        execute(
+            command = KedisServerCommands.whoAmI(),
+        )
 
     /**
-     * Asks the Redis server for the current username.
-     *
-     * [https://redis.io/commands/acl-whoami/](https://redis.io/commands/acl-whoami/)
-     * @return The current username
+     * @see [KedisServerCommands.info]
      */
-    public suspend fun whoAmI(): String
-
-    /**
-     * Queries the info for the requested [section]s from the Redis server in a strictly typed form.
-     *
-     * [https://redis.io/commands/info/](https://redis.io/commands/info/)
-     * @return The requested information
-     */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisServerCommands.info(\n" +
+                "        section = section,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisServerCommands",
+        ),
+    )
     public suspend fun info(
         vararg section: InfoSectionName,
-    ): List<InfoSection>
+    ): List<InfoSection> =
+        execute(
+            command = KedisServerCommands.info(
+                section = section,
+            ),
+        )
 
     /**
-     * Queries the info for the requested [section]s from the Redis server in string map form.
-     *
-     * [https://redis.io/commands/info/](https://redis.io/commands/info/)
-     * @return The requested information - the first key is the lowercase section name, the second the actual field
+     * @see [KedisServerCommands.infoMap]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisServerCommands.infoMap(\n" +
+                "        section = section,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisServerCommands",
+        ),
+    )
     public suspend fun infoMap(
         vararg section: InfoSectionName,
-    ): Map<String?, Map<String, String>>
+    ): Map<String?, Map<String, String>> =
+        execute(
+            command = KedisServerCommands.infoMap(
+                section = section,
+            ),
+        )
 
     /**
-     * Queries the info for the requested [section]s from the Redis server in string form.
-     *
-     * [https://redis.io/commands/info/](https://redis.io/commands/info/)
-     * @return The requested information
+     * @see [KedisServerCommands.infoRaw]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisServerCommands.infoRaw(\n" +
+                "        section = section,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisServerCommands",
+        ),
+    )
     public suspend fun infoRaw(
         vararg section: InfoSectionName,
-    ): String?
+    ): String? =
+        execute(
+            command = KedisServerCommands.infoRaw(
+                section = section,
+            ),
+        )
 
     /**
-     * Clears all redis DBs.
-     *
-     * [https://redis.io/commands/flushall/](https://redis.io/commands/flushall/)
-     * @return Whether the server responded with "OK"
+     * @see [KedisServerCommands.flushAll]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisServerCommands.flushAll(\n" +
+                "        sync = sync,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisServerCommands",
+        ),
+    )
     public suspend fun flushAll(
         sync: SyncOption = SyncOption.SYNC,
-    ): Boolean
+    ): Boolean =
+        execute(
+            command = KedisServerCommands.flushAll(
+                sync = sync,
+            ),
+        )
 
     /**
-     * Clears the current redis DB.
-     *
-     * [https://redis.io/commands/flushdb/](https://redis.io/commands/flushdb/)
-     * @return Whether the server responded with "OK"
+     * @see [KedisServerCommands.flushDb]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisServerCommands.flushDb(\n" +
+                "        sync = sync,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisServerCommands",
+        ),
+    )
     public suspend fun flushDb(
         sync: SyncOption = SyncOption.SYNC,
-    ): Boolean
+    ): Boolean =
+        execute(
+            command = KedisServerCommands.flushDb(
+                sync = sync,
+            ),
+        )
 
     /**
-     * Saves the current DB to disk in the background. When [schedule], it will only be scheduled, otherwise it will be started immediately.
-     *
-     * [https://redis.io/commands/bgsave/](https://redis.io/commands/bgsave/)
+     * @see [KedisServerCommands.bgSave]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisServerCommands.bgSave(\n" +
+                "        schedule = schedule,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisServerCommands",
+        ),
+    )
     public suspend fun bgSave(
         schedule: Boolean = false,
-    ): BgSaveResult
+    ): BgSaveResult =
+        execute(
+            command = KedisServerCommands.bgSave(
+                schedule = schedule,
+            ),
+        )
 
     /**
-     * Gets the value behind the given [key].
-     *
-     * [https://redis.io/commands/get/](https://redis.io/commands/get/)
-     * @return The value or NULL
+     * @see [KedisValueCommands.get]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisValueCommands.get(\n" +
+                "        key = key,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisValueCommands",
+        ),
+    )
     public suspend fun get(
         key: String,
-    ): String?
+    ): String? =
+        execute(
+            command = KedisValueCommands.get(
+                key = key,
+            ),
+        )
 
     /**
-     * Gets the value behind the given [key].
-     *
-     * [https://redis.io/commands/get/](https://redis.io/commands/get/)
-     * @return The value or NULL
+     * @see [KedisValueCommands.getBinary]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisValueCommands.getBinary(\n" +
+                "        key = key,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisValueCommands",
+        ),
+    )
     public suspend fun getBinary(
         key: String,
-    ): ByteArray?
+    ): ByteArray? =
+        execute(
+            command = KedisValueCommands.getBinary(
+                key = key,
+            ),
+        )
 
     /**
-     * Gets part ([start]..[end] - both inclusive, clamped to real bounds) of the value behind the given [key]. The range parameters may also be negative to index from the end of the string. If the [key] does not exist, the result will be empty.
-     *
-     * [https://redis.io/commands/getrange/](https://redis.io/commands/getrange/)
-     * @param start The inclusive start of the requested range - may be negative
-     * @param end The inclusive end of the requested range - may be negative
-     * @return The requested part ([start]..[end]) of the value behind the [key]
-     * @see [getRange]
+     * @see [KedisValueCommands.getRange]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisValueCommands.getRange(\n" +
+                "        key = key,\n" +
+                "        start = start,\n" +
+                "        end = end,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisValueCommands",
+        ),
+    )
     public suspend fun getRange(
         key: String,
         start: Long,
         end: Long,
-    ): String
+    ): String =
+        execute(
+            command = KedisValueCommands.getRange(
+                key = key,
+                start = start,
+                end = end,
+            ),
+        )
 
     /**
-     * Gets part ([range] - clamped to real bounds) of the value behind the given [key]. If the [key] does not exist, the result will be empty.
-     *
-     * [https://redis.io/commands/getrange/](https://redis.io/commands/getrange/)
-     * @return The requested part ([range]) of the value behind the [key]
-     * @see [getRange]
+     * @see [KedisValueCommands.getRange]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisValueCommands.getRange(\n" +
+                "        key = key,\n" +
+                "        range = range,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisValueCommands",
+        ),
+    )
     public suspend fun getRange(
         key: String,
         range: LongRange,
     ): String =
-        getRange(
-            key = key,
-            start = range.first,
-            end = range.last,
+        execute(
+            command = KedisValueCommands.getRange(
+                key = key,
+                range = range,
+            ),
         )
 
     /**
-     * Sets the value behind the given [key], minding the [options].
-     *
-     * [https://redis.io/commands/set/](https://redis.io/commands/set/)
-     * @return Whether the operation was successful and the previous value if requested
+     * @see [KedisValueCommands.set]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisValueCommands.set(\n" +
+                "        key = key,\n" +
+                "        value = value,\n" +
+                "        options = options,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisValueCommands",
+        ),
+    )
     public suspend fun set(
         key: String,
         value: String,
         options: SetOptions = SetOptions(),
-    ): SetResult
+    ): SetResult =
+        execute(
+            command = KedisValueCommands.set(
+                key = key,
+                value = value,
+                options = options,
+            ),
+        )
 
     /**
-     * Sets the value behind the given [key], minding the [options].
-     *
-     * [https://redis.io/commands/set/](https://redis.io/commands/set/)
-     * @return Whether the operation was successful and the previous value if requested
+     * @see [KedisValueCommands.setBinary]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisValueCommands.setBinary(\n" +
+                "        key = key,\n" +
+                "        value = value,\n" +
+                "        options = options,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisValueCommands",
+        ),
+    )
     public suspend fun setBinary(
         key: String,
         value: ByteArray,
         options: SetOptions = SetOptions(),
-    ): SetBinaryResult
+    ): SetBinaryResult =
+        execute(
+            command = KedisValueCommands.setBinary(
+                key = key,
+                value = value,
+                options = options,
+            ),
+        )
 
     /**
-     * Removes the provided [key]s. If a key does not exist, no error is thrown.
-     *
-     * [https://redis.io/commands/del/](https://redis.io/commands/del/)
-     * @return The number of removed provided [key]s
+     * @see [KedisValueCommands.del]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisValueCommands.del(\n" +
+                "        key = key,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisValueCommands",
+        ),
+    )
     public suspend fun del(
         vararg key: String,
-    ): Long
+    ): Long =
+        execute(
+            command = KedisValueCommands.del(
+                key = key,
+            ),
+        )
 
     /**
-     * Checks whether the given [key]s exist.
-     *
-     * [https://redis.io/commands/exists/](https://redis.io/commands/exists/)
-     * @return The number of provided [key]s that do exist
+     * @see [KedisValueCommands.exists]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisValueCommands.exists(\n" +
+                "        key = key,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisValueCommands",
+        ),
+    )
     public suspend fun exists(
         vararg key: String,
-    ): Long
+    ): Long =
+        execute(
+            command = KedisValueCommands.exists(
+                key = key,
+            ),
+        )
 
     /**
-     * Gets the time in UNIX seconds or milliseconds - depending on the [inMilliseconds] argument - when the given [key] expires.
-     *
-     * Only available for redis >=7.0.0.
-     *
-     * [https://redis.io/commands/expiretime/](https://redis.io/commands/expiretime/)
-     *
-     * [https://redis.io/commands/pexpiretime/](https://redis.io/commands/pexpiretime/)
-     * @param inMilliseconds Whether the resulting time should be in milliseconds or seconds
-     * @return The time UNIX timestamp ([inMilliseconds]) of expiration
+     * @see [KedisValueCommands.expireTime]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisValueCommands.expireTime(\n" +
+                "        key = key,\n" +
+                "        inMilliseconds = inMilliseconds,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisValueCommands",
+        ),
+    )
     public suspend fun expireTime(
         key: String,
         inMilliseconds: Boolean = true,
-    ): ExpireTimeResult
+    ): ExpireTimeResult =
+        execute(
+            command = KedisValueCommands.expireTime(
+                key = key,
+                inMilliseconds = inMilliseconds,
+            ),
+        )
 
     /**
-     * Gets the remaining time-to-live in seconds or milliseconds - depending on the [inMilliseconds] argument.
-     *
-     * [https://redis.io/commands/ttl/](https://redis.io/commands/ttl/)
-     *
-     * [https://redis.io/commands/pttl/](https://redis.io/commands/pttl/)
-     * @param inMilliseconds Whether the resulting time should be in milliseconds or seconds
-     * @return The remaining time-to-live (seconds or milliseconds)
+     * @see [KedisValueCommands.ttl]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisValueCommands.ttl(\n" +
+                "        key = key,\n" +
+                "        inMilliseconds = inMilliseconds,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisValueCommands",
+        ),
+    )
     public suspend fun ttl(
         key: String,
         inMilliseconds: Boolean = true,
-    ): TtlResult
+    ): TtlResult =
+        execute(
+            command = KedisValueCommands.ttl(
+                key = key,
+                inMilliseconds = inMilliseconds,
+            ),
+        )
 
     /**
-     * Appends the given [value] to the current value behind the given [key]. If the [key] does not exist yet, it will be created.
-     *
-     * [https://redis.io/commands/append/](https://redis.io/commands/append/)
-     * @return The length of the value after appending
+     * @see [KedisValueCommands.append]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisValueCommands.append(\n" +
+                "        key = key,\n" +
+                "        value = value,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisValueCommands",
+        ),
+    )
     public suspend fun append(
         key: String,
         value: String,
-    ): Long
+    ): Long =
+        execute(
+            command = KedisValueCommands.append(
+                key = key,
+                value = value,
+            ),
+        )
 
     /**
-     * Retrieves the string length of the value behind the given [key]. If the [key] does not exist, it will be 0.
-     *
-     * Only works on string values. It may or may not work on binary data.
-     *
-     * [https://redis.io/commands/strlen/](https://redis.io/commands/strlen/)
-     * @return The length of the value
+     * @see [KedisValueCommands.strLen]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisValueCommands.strLen(\n" +
+                "        key = key,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisValueCommands",
+        ),
+    )
     public suspend fun strLen(
         key: String,
-    ): Long
+    ): Long =
+        execute(
+            command = KedisValueCommands.strLen(
+                key = key,
+            ),
+        )
 
     /**
-     * Decrements the value behind the given [key] by one (1). If it does not exist at the beginning, it is assumed to be 0 before decrementing.
-     *
-     * [https://redis.io/commands/decr/](https://redis.io/commands/decr/)
-     * @return The value after decrementing
-     * @see decrBy
-     * @see incr
-     * @see incrBy
-     * @see incrByFloat
+     * @see [KedisValueCommands.decr]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisValueCommands.decr(\n" +
+                "        key = key,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisValueCommands",
+        ),
+    )
     public suspend fun decr(
         key: String,
-    ): Long
+    ): Long =
+        execute(
+            command = KedisValueCommands.decr(
+                key = key,
+            ),
+        )
 
     /**
-     * Decrements the value behind the given [key] by [by]. If it does not exist at the beginning, it is assumed to be 0 before decrementing.
-     *
-     * [https://redis.io/commands/decrby/](https://redis.io/commands/decrby/)
-     * @return The value after decrementing
-     * @see decr
-     * @see incr
-     * @see incrBy
-     * @see incrByFloat
+     * @see [KedisValueCommands.decrBy]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisValueCommands.decrBy(\n" +
+                "        key = key,\n" +
+                "        by = by,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisValueCommands",
+        ),
+    )
     public suspend fun decrBy(
         key: String,
         by: Long,
-    ): Long
+    ): Long =
+        execute(
+            command = KedisValueCommands.decrBy(
+                key = key,
+                by = by,
+            ),
+        )
 
     /**
-     * Increments the value behind the given [key] by one (1). If it does not exist at the beginning, it is assumed to be 0 before incrementing.
-     *
-     * [https://redis.io/commands/incr/](https://redis.io/commands/incr/)
-     * @return The value after incrementing
-     * @see incrBy
-     * @see decr
-     * @see decrBy
-     * @see incrByFloat
+     * @see [KedisValueCommands.incr]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisValueCommands.incr(\n" +
+                "        key = key,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisValueCommands",
+        ),
+    )
     public suspend fun incr(
         key: String,
-    ): Long
+    ): Long =
+        execute(
+            command = KedisValueCommands.incr(
+                key = key,
+            ),
+        )
 
     /**
-     * Increments the value behind the given [key] by [by]. If it does not exist at the beginning, it is assumed to be 0 before incrementing.
-     *
-     * [https://redis.io/commands/incrby/](https://redis.io/commands/incrby/)
-     * @return The value after incrementing
-     * @see incr
-     * @see decr
-     * @see decrBy
-     * @see incrByFloat
+     * @see [KedisValueCommands.incrBy]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisValueCommands.incrBy(\n" +
+                "        key = key,\n" +
+                "        by = by,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisValueCommands",
+        ),
+    )
     public suspend fun incrBy(
         key: String,
         by: Long,
-    ): Long
+    ): Long =
+        execute(
+            command = KedisValueCommands.incrBy(
+                key = key,
+                by = by,
+            ),
+        )
 
     /**
-     * Increments (or decrements when [by] is negative) the value behind the given [key] by [by]. If it does not exist at the beginning, it is assumed to be 0 before incrementing / decrementing.
-     *
-     * [https://redis.io/commands/incrbyfloat/](https://redis.io/commands/incrbyfloat/)
-     * @return The value after incrementing / decrementing
+     * @see [KedisValueCommands.incrByFloat]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisValueCommands.incrByFloat(\n" +
+                "        key = key,\n" +
+                "        by = by,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisValueCommands",
+        ),
+    )
     public suspend fun incrByFloat(
         key: String,
         by: Double = 1.0,
-    ): Double
+    ): Double =
+        execute(
+            command = KedisValueCommands.incrByFloat(
+                key = key,
+                by = by,
+            ),
+        )
 
     /**
-     * Gets the value behind the given [field] in the [key] hash map.
-     *
-     * [https://redis.io/commands/hget/](https://redis.io/commands/hget/)
-     * @return The value or NULL
+     * @see [KedisHashCommands.hashGet]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisHashCommands.hashGet(\n" +
+                "        key = key,\n" +
+                "        field = field,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisHashCommands",
+        ),
+    )
     public suspend fun hashGet(
         key: String,
         field: String,
-    ): String?
+    ): String? =
+        execute(
+            command = KedisHashCommands.hashGet(
+                key = key,
+                field = field,
+            ),
+        )
 
     /**
-     * Gets the value behind the given [field] in the [key] hash map.
-     *
-     * [https://redis.io/commands/hget/](https://redis.io/commands/hget/)
-     * @return The value or NULL
+     * @see [KedisHashCommands.hashGetBinary]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisHashCommands.hashGetBinary(\n" +
+                "        key = key,\n" +
+                "        field = field,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisHashCommands",
+        ),
+    )
     public suspend fun hashGetBinary(
         key: String,
         field: String,
-    ): ByteArray?
+    ): ByteArray? =
+        execute(
+            command = KedisHashCommands.hashGetBinary(
+                key = key,
+                field = field,
+            ),
+        )
 
     /**
-     * Gets the hash map behind the given [key].
-     *
-     * [https://redis.io/commands/hgetall/](https://redis.io/commands/hgetall/)
-     * @return The map or NULL
+     * @see [KedisHashCommands.hashGetAll]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisHashCommands.hashGetAll(\n" +
+                "        key = key,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisHashCommands",
+        ),
+    )
     public suspend fun hashGetAll(
         key: String,
-    ): Map<String, String>?
+    ): Map<String, String>? =
+        execute(
+            command = KedisHashCommands.hashGetAll(
+                key = key,
+            ),
+        )
 
     /**
-     * Gets the hash map behind the given [key].
-     *
-     * [https://redis.io/commands/hgetall/](https://redis.io/commands/hgetall/)
-     * @return The map or NULL
+     * @see [KedisHashCommands.hashGetAllBinary]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisHashCommands.hashGetAllBinary(\n" +
+                "        key = key,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisHashCommands",
+        ),
+    )
     public suspend fun hashGetAllBinary(
         key: String,
-    ): Map<String, ByteArray>?
+    ): Map<String, ByteArray>? =
+        execute(
+            command = KedisHashCommands.hashGetAllBinary(
+                key = key,
+            ),
+        )
 
     /**
-     * Sets the given [fieldValues] on the hash map behind [key]. If the hash map does not exist, it is created.
-     *
-     * If the hash map already contains other field than those provided in [fieldValues], they are not removed. If the field is already present, it is overwritten.
-     *
-     * [https://redis.io/commands/hset/](https://redis.io/commands/hset/)
-     * @return The number of fields that were added (not just set)
+     * @see [KedisHashCommands.hashSet]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisHashCommands.hashSet(\n" +
+                "        key = key,\n" +
+                "        fieldValues = fieldValues,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisHashCommands",
+        ),
+    )
     public suspend fun hashSet(
         key: String,
         fieldValues: Map<String, String>,
-    ): Long
+    ): Long =
+        execute(
+            command = KedisHashCommands.hashSet(
+                key = key,
+                fieldValues = fieldValues,
+            ),
+        )
 
     /**
-     * Sets the given [fieldValues] on the hash map behind [key]. If the hash map does not exist, it is created.
-     *
-     * If the hash map already contains other field than those provided in [fieldValues], they are not removed. If the field is already present, it is overwritten.
-     *
-     * [https://redis.io/commands/hset/](https://redis.io/commands/hset/)
-     * @return The number of fields that were added (not just set)
+     * @see [KedisHashCommands.hashSetBinary]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisHashCommands.hashSetBinary(\n" +
+                "        key = key,\n" +
+                "        fieldValues = fieldValues,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisHashCommands",
+        ),
+    )
     public suspend fun hashSetBinary(
         key: String,
         fieldValues: Map<String, ByteArray>,
-    ): Long
+    ): Long =
+        execute(
+            command = KedisHashCommands.hashSetBinary(
+                key = key,
+                fieldValues = fieldValues,
+            ),
+        )
 
     /**
-     * Removes the provided [field]s from the hash map behind [key]. If a [field] does not exist, no error is thrown.
-     *
-     * [https://redis.io/commands/hdel/](https://redis.io/commands/hdel/)
-     * @return The number of removed provided [field]s
+     * @see [KedisHashCommands.hashDel]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisHashCommands.hashDel(\n" +
+                "        key = key,\n" +
+                "        field = field,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisHashCommands",
+        ),
+    )
     public suspend fun hashDel(
         key: String,
         vararg field: String,
-    ): Long
+    ): Long =
+        execute(
+            command = KedisHashCommands.hashDel(
+                key = key,
+                field = field,
+            ),
+        )
 
     /**
-     * Checks whether the given [field] exists on the hash map behind [key].
-     *
-     * [https://redis.io/commands/hexists/](https://redis.io/commands/hexists/)
-     * @return The number of provided [key]s that do exist
+     * @see [KedisHashCommands.hashExists]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisHashCommands.hashExists(\n" +
+                "        key = key,\n" +
+                "        field = field,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisHashCommands",
+        ),
+    )
     public suspend fun hashExists(
         key: String,
         field: String,
-    ): Boolean
+    ): Boolean =
+        execute(
+            command = KedisHashCommands.hashExists(
+                key = key,
+                field = field,
+            ),
+        )
 
     /**
-     * Gets the fields of the hash map behind [key].
-     *
-     * [https://redis.io/commands/hkeys/](https://redis.io/commands/hkeys/)
-     * @return The field names
+     * @see [KedisHashCommands.hashKeys]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisHashCommands.hashKeys(\n" +
+                "        key = key,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisHashCommands",
+        ),
+    )
     public suspend fun hashKeys(
         key: String,
-    ): List<String>?
+    ): List<String>? =
+        execute(
+            command = KedisHashCommands.hashKeys(
+                key = key,
+            ),
+        )
 
     /**
-     * Gets the number of fields of the hash map behind [key].
-     *
-     * [https://redis.io/commands/hlen/](https://redis.io/commands/hlen/)
-     * @return The number of fields
+     * @see [KedisHashCommands.hashLength]
      */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisHashCommands.hashLength(\n" +
+                "        key = key,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisHashCommands",
+        ),
+    )
     public suspend fun hashLength(
         key: String,
-    ): Long
+    ): Long =
+        execute(
+            command = KedisHashCommands.hashLength(
+                key = key,
+            ),
+        )
 }

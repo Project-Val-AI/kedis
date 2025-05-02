@@ -1,11 +1,12 @@
-package io.github.domgew.kedis
+package io.github.domgew.kedis.impl
 
+import io.github.domgew.kedis.KedisException
 import io.ktor.utils.io.errors.PosixException
 import kotlinx.io.EOFException
 import kotlinx.io.IOException
 
-internal actual suspend fun <T> commoniseConnectException(
-    block: suspend () -> T,
+internal actual inline fun <T> commoniseConnectException(
+    block: () -> T,
 ): T =
     try {
         commoniseNetworkExceptions(
@@ -24,8 +25,8 @@ internal actual suspend fun <T> commoniseConnectException(
         )
     }
 
-internal actual suspend fun <T> commoniseNetworkExceptions(
-    block: suspend () -> T,
+internal actual inline fun <T> commoniseNetworkExceptions(
+    block: () -> T,
 ): T =
     try {
         block()

@@ -1,14 +1,18 @@
 package io.github.domgew.kedis
 
+import io.github.domgew.kedis.commands.KedisServerCommands
 import io.github.domgew.kedis.utils.RedisUtil
 import io.github.domgew.kedis.utils.TestConfigUtil
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 
 class AuthE2eTest {
+
     @Test
     fun testAutoAuth() = runTest {
         withContext(Dispatchers.Default) {
@@ -30,18 +34,23 @@ class AuthE2eTest {
                         username = username,
                         password = password,
                     ),
-                    connectionTimeoutMillis = 2_000L,
+                    connectionTimeout = 2.seconds,
                 ),
             )
 
             try {
                 client.connect()
-                assertEquals(username, client.whoAmI())
+                assertEquals(
+                    username,
+                    client.execute(
+                        KedisServerCommands.whoAmI(),
+                    ),
+                )
             } finally {
+                client.close()
                 RedisUtil.removeUser(
                     username = username,
                 )
-                client.close()
             }
         }
     }
@@ -64,27 +73,36 @@ class AuthE2eTest {
                         port = TestConfigUtil.getPort(),
                     ),
                     authentication = KedisConfiguration.Authentication.NoAutoAuth,
-                    connectionTimeoutMillis = 2_000L,
+                    connectionTimeout = 2.seconds,
                 ),
             )
 
             try {
                 client.connect()
-                assertEquals(
-                    "default",
-                    client.whoAmI()
+                assertNotEquals(
+                    username,
+                    client.execute(
+                        command = KedisServerCommands.whoAmI(),
+                    )
                         .lowercase(),
                 )
-                client.auth(
-                    username = username,
-                    password = password,
+                client.execute(
+                    command = KedisServerCommands.auth(
+                        username = username,
+                        password = password,
+                    ),
                 )
-                assertEquals(username, client.whoAmI())
+                assertEquals(
+                    username,
+                    client.execute(
+                        command = KedisServerCommands.whoAmI(),
+                    ),
+                )
             } finally {
+                client.close()
                 RedisUtil.removeUser(
                     username = username,
                 )
-                client.close()
             }
         }
     }

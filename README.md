@@ -41,7 +41,8 @@ repositories {
 
 ## Documentation
 
-See Dokka-generated [docs](https://javadoc.io/doc/io.github.domgew/kedis/latest/kedis/io.github.domgew.kedis/index.html). For available commands see the documentation of the KedisClient interface and the KedisConfiguration for the available configuration options.
+See Dokka-generated [docs](https://javadoc.io/doc/io.github.domgew/kedis/latest/kedis/io.github.domgew.kedis/index.html).
+For available commands see the documentation of the `commands` package and the KedisConfiguration for the available configuration options.
 
 ## Targets
 
@@ -52,7 +53,7 @@ See Dokka-generated [docs](https://javadoc.io/doc/io.github.domgew/kedis/latest/
 * Native: Linux ARM64
 * Native: macOS X64
 * Native: macOS ARM64
-* Native: MinGW X64
+* Native: mingw X64
 
 **Potential Future Targets** (mostly currently no Ktor Network support):
 
@@ -82,7 +83,7 @@ See Dokka-generated [docs](https://javadoc.io/doc/io.github.domgew/kedis/latest/
 | Mature                        |              &cross;               |                      &check;                       |
 | Full-Featured                 |              &cross;               |                      &check;                       |
 | Pub-Sub Support               |              &cross;               |                      &check;                       |
-| Pipelining Support            |              &cross;               |                      &check;                       |
+| Pipelining Support            |              &check;               |                      &check;                       |
 | GraalVM Native Support        |              &cross;               |                      &cross;                       |
 | Exclusive Configuration       | Compile Time / Sealed Polymorthism |            Run Time / Builder Exception            |
 | Responses                     |           Strictly Typed           |                      Semi-Raw                      |

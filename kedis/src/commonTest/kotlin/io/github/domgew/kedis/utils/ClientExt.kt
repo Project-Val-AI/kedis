@@ -1,12 +1,17 @@
 package io.github.domgew.kedis.utils
 
 import io.github.domgew.kedis.KedisClient
-import io.github.domgew.kedis.arguments.InfoSectionName
+import io.github.domgew.kedis.arguments.server.InfoSectionName
+import io.github.domgew.kedis.commands.KedisServerCommands
 import io.github.domgew.kedis.results.server.InfoSection
 import net.swiftzer.semver.SemVer
 
 suspend fun KedisClient.getRedisVersion(): SemVer? =
-    info(InfoSectionName.SERVER)
+    execute(
+        command = KedisServerCommands.info(
+            InfoSectionName.SERVER,
+        ),
+    )
         .filterIsInstance<InfoSection.Server>()
         .firstOrNull()
         ?.redisVersion
