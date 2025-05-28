@@ -183,7 +183,7 @@ internal sealed class RedisMessage {
         }
     }
 
-    object NullMessage : RedisMessage() {
+    data object NullMessage : RedisMessage() {
         const val TYPE_BYTE: Byte = 95 // '_'
 
         override suspend fun writeTo(outgoing: ByteWriteChannel) {
@@ -196,14 +196,6 @@ internal sealed class RedisMessage {
             verifyLFByte<NullMessage>(incoming)
 
             return NullMessage
-        }
-
-        override fun equals(other: Any?): Boolean {
-            return other != null && other is NullMessage
-        }
-
-        override fun hashCode(): Int {
-            return this::class.hashCode()
         }
     }
 
