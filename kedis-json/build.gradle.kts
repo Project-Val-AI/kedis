@@ -10,7 +10,7 @@ plugins {
     kotlin("plugin.serialization") version "2.0.20" // stay on 2.0.20, 2.1.20 has a weird issue with dependencies
 //     alias(libs.plugins.kotlinx.serialization)
     `maven-publish`
-    signing
+//     signing
 }
 
 group = "io.github.domgew"
@@ -196,19 +196,19 @@ publishing {
     }
 }
 
-signing {
-    useInMemoryPgpKeys(
-        System.getenv("GPG_PRIVATE_KEY"),
-        System.getenv("GPG_PRIVATE_PASSWORD"),
-    )
-    sign(publishing.publications)
-}
-
-// https://github.com/gradle/gradle/issues/26091
-val signingTasks = tasks.withType<Sign>()
-tasks.withType<AbstractPublishToMaven>().configureEach {
-    dependsOn(signingTasks)
-}
+// signing {
+//     useInMemoryPgpKeys(
+//         System.getenv("GPG_PRIVATE_KEY"),
+//         System.getenv("GPG_PRIVATE_PASSWORD"),
+//     )
+//     sign(publishing.publications)
+// }
+//
+// // https://github.com/gradle/gradle/issues/26091
+// val signingTasks = tasks.withType<Sign>()
+// tasks.withType<AbstractPublishToMaven>().configureEach {
+//     dependsOn(signingTasks)
+// }
 
 // smartPublish as per https://github.com/Dominaezzz/kotlin-sqlite/blob/master/build.gradle.kts
 afterEvaluate {

@@ -18,7 +18,7 @@ public object KedisJsonCommands {
      * [https://redis.io/commands/json.get/](https://redis.io/commands/json.get/)
      * @return The value or NULL
      */
-    public inline fun <reified T: Any> get(
+    public inline fun <reified T: Any> jsonGet(
         key: String,
         serializer: KSerializer<T> = T::class.serializer(),
         path: JsonPath = JsonPath.ROOT,
@@ -36,7 +36,7 @@ public object KedisJsonCommands {
      * [https://redis.io/commands/json.set/](https://redis.io/commands/json.set/)
      * @return Whether the operation was successful and the previous value if requested
      */
-    public inline fun <reified T: Any> set(
+    public inline fun <reified T: Any> jsonSet(
         key: String,
         value: T,
         serializer: KSerializer<T> = T::class.serializer(),

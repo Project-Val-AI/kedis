@@ -12,6 +12,7 @@ import io.github.domgew.kedis.commands.value.DecrByCommand
 import io.github.domgew.kedis.commands.value.DecrCommand
 import io.github.domgew.kedis.commands.value.DelCommand
 import io.github.domgew.kedis.commands.value.ExistsCommand
+import io.github.domgew.kedis.commands.value.ExpireCommand
 import io.github.domgew.kedis.commands.value.ExpireTimeCommand
 import io.github.domgew.kedis.commands.value.GetBinaryCommand
 import io.github.domgew.kedis.commands.value.GetCommand
@@ -27,6 +28,7 @@ import io.github.domgew.kedis.results.value.ExpireTimeResult
 import io.github.domgew.kedis.results.value.SetBinaryResult
 import io.github.domgew.kedis.results.value.SetResult
 import io.github.domgew.kedis.results.value.TtlResult
+import kotlin.time.Duration
 
 public object KedisValueCommands {
 
@@ -105,6 +107,24 @@ public object KedisValueCommands {
     ): KedisCommand<Long> =
         ExistsCommand(
             keys = key.asList(),
+        )
+
+    /**
+     * Set a timeout on key.
+     *
+     * [https://redis.io/commands/expire/](https://redis.io/commands/expire/)
+     *
+     * [https://redis.io/commands/expire/](https://redis.io/commands/expire/)
+     * @param duration The timeout duration.
+     * @return The time in seconds of expiration
+     */
+    public fun expire(
+        key: String,
+        duration: Duration,
+    ): KedisCommand<ExpireTimeResult> =
+        ExpireCommand(
+            key = key,
+            seconds = duration.inWholeSeconds
         )
 
     /**
