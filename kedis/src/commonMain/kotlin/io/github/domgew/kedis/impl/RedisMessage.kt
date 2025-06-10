@@ -9,34 +9,42 @@ import io.ktor.utils.io.writeByte
 import io.ktor.utils.io.writeFully
 import kotlin.reflect.KClass
 
-internal sealed class RedisMessage {
+public sealed class RedisMessage {
 
-    abstract suspend fun writeTo(
+    abstract public suspend fun writeTo(
         outgoing: ByteWriteChannel,
     )
 
-    class ParsingException(
+    public class ParsingException(
         message: String,
         type: KClass<*>,
     ) : Exception(
         "Could not parse ${type.simpleName}: $message",
     )
 
-    data class SimpleStringMessage(
+    public data class ByteArrayMessage(
+        val data: ByteArray,
+    ) : RedisMessage() {
+        override public suspend fun writeTo(outgoing: ByteWriteChannel) {
+            outgoing.writeFully("+$data\r\n".encodeToByteArray())
+        }
+    }
+
+    public data class SimpleStringMessage(
         override val value: String,
     ) : StringMessage() {
         override val data: ByteArray
             get() = value.encodeToByteArray()
 
-        override suspend fun writeTo(outgoing: ByteWriteChannel) {
+        override public suspend fun writeTo(outgoing: ByteWriteChannel) {
             outgoing.writeFully("+$value\r\n".encodeToByteArray())
         }
 
-        companion object {
-            const val TYPE_BYTE: Byte = 43 // '+'
+        public companion object {
+            public const val TYPE_BYTE: Byte = 43 // '+'
 
             // "+OK\r\n" -> "OK"
-            suspend fun parse(incoming: ByteReadChannel): SimpleStringMessage {
+            public suspend fun parse(incoming: ByteReadChannel): SimpleStringMessage {
                 val bytes = readUntilCR(incoming)
                 verifyLFByte<SimpleStringMessage>(incoming)
 
@@ -47,18 +55,18 @@ internal sealed class RedisMessage {
         }
     }
 
-    data class SimpleErrorMessage(
+    public data class SimpleErrorMessage(
         override val value: String,
     ) : ErrorMessage() {
-        override suspend fun writeTo(outgoing: ByteWriteChannel) {
+        override public suspend fun writeTo(outgoing: ByteWriteChannel) {
             outgoing.writeFully("-$value\r\n".encodeToByteArray())
         }
 
-        companion object {
-            const val TYPE_BYTE: Byte = 45 // '-'
+        public companion object {
+            public const val TYPE_BYTE: Byte = 45 // '-'
 
             // "-Error message\r\n" -> "Error message"
-            suspend fun parse(incoming: ByteReadChannel): SimpleErrorMessage {
+            public suspend fun parse(incoming: ByteReadChannel): SimpleErrorMessage {
                 val bytes = readUntilCR(incoming)
                 verifyLFByte<SimpleErrorMessage>(incoming)
 
@@ -69,18 +77,18 @@ internal sealed class RedisMessage {
         }
     }
 
-    data class IntegerMessage(
+    public data class IntegerMessage(
         val value: Long,
     ) : NumericMessage() {
-        override suspend fun writeTo(outgoing: ByteWriteChannel) {
+        override public suspend fun writeTo(outgoing: ByteWriteChannel) {
             outgoing.writeFully(":$value\r\n".encodeToByteArray())
         }
 
-        companion object {
-            const val TYPE_BYTE: Byte = 58 // ':'
+        public companion object {
+            public const val TYPE_BYTE: Byte = 58 // ':'
 
             // ":[<+|->]<value>\r\n" -> [+|-]value
-            suspend fun parse(incoming: ByteReadChannel): IntegerMessage {
+            public suspend fun parse(incoming: ByteReadChannel): IntegerMessage {
                 val bytes = readUntilCR(incoming)
                 verifyLFByte<IntegerMessage>(incoming)
 
@@ -92,19 +100,19 @@ internal sealed class RedisMessage {
         }
     }
 
-    data class BulkStringMessage(
+    public data class BulkStringMessage(
         override val data: ByteArray,
     ) : StringMessage() {
         override val value: String
             get() = data.decodeToString()
 
-        constructor(
+        public constructor(
             value: String,
         ) : this(
             data = value.encodeToByteArray(),
         )
 
-        override suspend fun writeTo(outgoing: ByteWriteChannel) {
+        override public suspend fun writeTo(outgoing: ByteWriteChannel) {
             outgoing.writeFully("\$${data.size}\r\n".encodeToByteArray())
             outgoing.writeFully(data)
             outgoing.writeFully(CRLF_BYTES)
@@ -122,11 +130,11 @@ internal sealed class RedisMessage {
         override fun hashCode(): Int =
             data.contentHashCode()
 
-        companion object {
-            const val TYPE_BYTE: Byte = 36 // '$'
+        public companion object {
+            public const val TYPE_BYTE: Byte = 36 // '$'
 
             // "$<length>\r\n<data>\r\n" -> "<data>"
-            suspend fun parse(incoming: ByteReadChannel): RedisMessage {
+            public suspend fun parse(incoming: ByteReadChannel): RedisMessage {
                 val length = readLength<BulkStringMessage>(incoming)
 
                 // "$-1\r\n" -> NULL
@@ -145,24 +153,24 @@ internal sealed class RedisMessage {
         }
     }
 
-    data class ArrayMessage(
+    public data class ArrayMessage(
         val value: List<RedisMessage>,
     ) : ArrayLikeMessage() {
         override fun asList(): List<RedisMessage> =
             value
 
-        override suspend fun writeTo(outgoing: ByteWriteChannel) {
+        public override suspend fun writeTo(outgoing: ByteWriteChannel) {
             outgoing.writeFully("*${value.size}\r\n".encodeToByteArray())
             for (message in value) {
                 message.writeTo(outgoing)
             }
         }
 
-        companion object {
-            const val TYPE_BYTE: Byte = 42 // '*'
+        public companion object {
+            public const val TYPE_BYTE: Byte = 42 // '*'
 
             // "*<number-of-elements>\r\n<element-1>...<element-n>" -> [element-1, ..., element-n]
-            suspend fun parse(incoming: ByteReadChannel): RedisMessage {
+            public suspend fun parse(incoming: ByteReadChannel): RedisMessage {
                 val length = readLength<ArrayMessage>(incoming)
 
                 // "*-1\r\n" -> NULL
@@ -183,15 +191,15 @@ internal sealed class RedisMessage {
         }
     }
 
-    data object NullMessage : RedisMessage() {
-        const val TYPE_BYTE: Byte = 95 // '_'
+    public data object NullMessage : RedisMessage() {
+        public const val TYPE_BYTE: Byte = 95 // '_'
 
-        override suspend fun writeTo(outgoing: ByteWriteChannel) {
+        override public suspend fun writeTo(outgoing: ByteWriteChannel) {
             outgoing.writeFully("_\r\n".encodeToByteArray())
         }
 
         // "_\r\n" -> NULL
-        suspend fun parse(incoming: ByteReadChannel): NullMessage {
+        public suspend fun parse(incoming: ByteReadChannel): NullMessage {
             verifyCRByte<NullMessage>(incoming)
             verifyLFByte<NullMessage>(incoming)
 
@@ -199,10 +207,10 @@ internal sealed class RedisMessage {
         }
     }
 
-    data class BooleanMessage(
+    public data class BooleanMessage(
         val value: Boolean,
     ) : RedisMessage() {
-        override suspend fun writeTo(outgoing: ByteWriteChannel) {
+        override public suspend fun writeTo(outgoing: ByteWriteChannel) {
             val strValue =
                 if (value) {
                     "t"
@@ -212,14 +220,14 @@ internal sealed class RedisMessage {
             outgoing.writeFully("#$strValue\r\n".encodeToByteArray())
         }
 
-        companion object {
-            const val TYPE_BYTE: Byte = 35 // '#'
+        public companion object {
+            public const val TYPE_BYTE: Byte = 35 // '#'
 
             private const val TRUE_BYTE: Byte = 116 // t
             private const val FALSE_BYTE: Byte = 102 // f
 
             // "#<t|f>\r\n" -> true|false
-            suspend fun parse(incoming: ByteReadChannel): BooleanMessage {
+            public suspend fun parse(incoming: ByteReadChannel): BooleanMessage {
                 val resultByte = incoming.readByte()
                 verifyCRByte<BooleanMessage>(incoming)
                 verifyLFByte<BooleanMessage>(incoming)
@@ -237,10 +245,10 @@ internal sealed class RedisMessage {
         }
     }
 
-    data class DoubleMessage(
+    public data class DoubleMessage(
         val value: Double,
     ) : NumericMessage() {
-        override suspend fun writeTo(outgoing: ByteWriteChannel) {
+        override public suspend fun writeTo(outgoing: ByteWriteChannel) {
             when {
                 value.isInfinite() && value > 0.0 -> {
                     outgoing.writeByte(TYPE_BYTE)
@@ -266,8 +274,8 @@ internal sealed class RedisMessage {
             }
         }
 
-        companion object {
-            const val TYPE_BYTE: Byte = 44 // ','
+        public companion object {
+            public const val TYPE_BYTE: Byte = 44 // ','
 
             // ",inf\r\n" -> INF
             private val INF_BYTES = "inf".encodeToByteArray()
@@ -279,7 +287,7 @@ internal sealed class RedisMessage {
             private val NAN_BYTES = "nan".encodeToByteArray()
 
             // ",[<+|->]<integral>[.<fractional>][<E|e>[sign]<exponent>]\r\n" -> [+|-]<value>
-            suspend fun parse(incoming: ByteReadChannel): DoubleMessage {
+            public suspend fun parse(incoming: ByteReadChannel): DoubleMessage {
                 val resultBytes = readUntilCR(incoming)
                 verifyLFByte<DoubleMessage>(incoming)
 
@@ -303,18 +311,18 @@ internal sealed class RedisMessage {
         }
     }
 
-    data class BigNumberMessage(
+    public data class BigNumberMessage(
         val value: BigInteger,
     ) : NumericMessage() {
-        override suspend fun writeTo(outgoing: ByteWriteChannel) {
+        override public suspend fun writeTo(outgoing: ByteWriteChannel) {
             outgoing.writeFully("(${value.toString(10)}\r\n".encodeToByteArray())
         }
 
-        companion object {
-            const val TYPE_BYTE: Byte = 40 // '('
+        public companion object {
+            public const val TYPE_BYTE: Byte = 40 // '('
 
             // "([+|-]<number>\r\n" -> [+|-]<number>
-            suspend fun parse(incoming: ByteReadChannel): BigNumberMessage {
+            public suspend fun parse(incoming: ByteReadChannel): BigNumberMessage {
                 val resultBytes = readUntilCR(incoming)
                 verifyLFByte<BigNumberMessage>(incoming)
 
@@ -328,10 +336,10 @@ internal sealed class RedisMessage {
         }
     }
 
-    data class BulkErrorMessage(
+    public data class BulkErrorMessage(
         override val value: String,
     ) : ErrorMessage() {
-        override suspend fun writeTo(outgoing: ByteWriteChannel) {
+        override public suspend fun writeTo(outgoing: ByteWriteChannel) {
             val valueBytes = value.encodeToByteArray()
 
             outgoing.writeFully("!${valueBytes.size}\r\n".encodeToByteArray())
@@ -339,11 +347,11 @@ internal sealed class RedisMessage {
             outgoing.writeFully(CRLF_BYTES)
         }
 
-        companion object {
-            const val TYPE_BYTE: Byte = 33 // '!'
+        public companion object {
+            public const val TYPE_BYTE: Byte = 33 // '!'
 
             // "!<length>\r\n<error>\r\n" -> "<error>"
-            suspend fun parse(incoming: ByteReadChannel): BulkErrorMessage {
+            public suspend fun parse(incoming: ByteReadChannel): BulkErrorMessage {
                 val length = readLength<BulkErrorMessage>(incoming)
                 val resultBytes = readNBytes(incoming, length)
                 verifyCRByte<BulkErrorMessage>(incoming)
@@ -356,14 +364,14 @@ internal sealed class RedisMessage {
         }
     }
 
-    data class VerbatimStringMessage(
+    public data class VerbatimStringMessage(
         val type: String,
         override val value: String,
     ) : StringMessage() {
         override val data: ByteArray
             get() = value.encodeToByteArray()
 
-        override suspend fun writeTo(outgoing: ByteWriteChannel) {
+        override public suspend fun writeTo(outgoing: ByteWriteChannel) {
             val payloadBytes = "$type:$value".encodeToByteArray()
 
             outgoing.writeFully("=${payloadBytes.size}\r\n".encodeToByteArray())
@@ -371,11 +379,11 @@ internal sealed class RedisMessage {
             outgoing.writeFully(CRLF_BYTES)
         }
 
-        companion object {
-            const val TYPE_BYTE: Byte = 61 // '='
+        public companion object {
+            public const val TYPE_BYTE: Byte = 61 // '='
 
             // "=<length>\r\n<encoding>:<data>\r\n"
-            suspend fun parse(incoming: ByteReadChannel): VerbatimStringMessage {
+            public suspend fun parse(incoming: ByteReadChannel): VerbatimStringMessage {
                 // length includes three (3) encoding bytes and seperator (":"); therefore we subtract four (3 + 1)
                 val length = readLength<VerbatimStringMessage>(incoming) - 4
                 val typeBytes = readNBytes(incoming, 3)
@@ -390,10 +398,10 @@ internal sealed class RedisMessage {
         }
     }
 
-    data class MessageMapMessage(
+    public data class MessageMapMessage(
         val value: Map<RedisMessage, RedisMessage>,
     ) : RedisMessage() {
-        override suspend fun writeTo(outgoing: ByteWriteChannel) {
+        override public suspend fun writeTo(outgoing: ByteWriteChannel) {
             outgoing.writeFully("%${value.size}\r\n".encodeToByteArray())
             for (item in value.entries) {
                 item.key.writeTo(outgoing)
@@ -401,8 +409,8 @@ internal sealed class RedisMessage {
             }
         }
 
-        companion object {
-            const val TYPE_BYTE: Byte = 37 // '%'
+        public companion object {
+            public const val TYPE_BYTE: Byte = 37 // '%'
 
             private val NULL_ENTRY = Pair<RedisMessage, RedisMessage>(
                 NullMessage,
@@ -410,7 +418,7 @@ internal sealed class RedisMessage {
             )
 
             // "%<number-of-entries>\r\n<key-1><value-1>...<key-n><value-n>" -> {<key1>: <value-1>), ..., <key-n>: <value-n>}
-            suspend fun parse(incoming: ByteReadChannel): MessageMapMessage {
+            public suspend fun parse(incoming: ByteReadChannel): MessageMapMessage {
                 val length = readLength<MessageMapMessage>(incoming)
                 val result = Array<Pair<RedisMessage, RedisMessage>>(length) { NULL_ENTRY }
                 for (i in 0 until length) {
@@ -426,24 +434,24 @@ internal sealed class RedisMessage {
         }
     }
 
-    data class MessageSetMessage(
+    public data class MessageSetMessage(
         val value: Set<RedisMessage>,
     ) : ArrayLikeMessage() {
         override fun asList(): List<RedisMessage> =
             value.toList()
 
-        override suspend fun writeTo(outgoing: ByteWriteChannel) {
+        override public suspend fun writeTo(outgoing: ByteWriteChannel) {
             outgoing.writeFully("~${value.size}\r\n".encodeToByteArray())
             for (item in value) {
                 item.writeTo(outgoing)
             }
         }
 
-        companion object {
-            const val TYPE_BYTE: Byte = 126 // '~'
+        public companion object {
+            public const val TYPE_BYTE: Byte = 126 // '~'
 
             // "~<number-of-elements>\r\n<element-1>...<element-n>" -> [<element-1>, ..., <element-n>]
-            suspend fun parse(incoming: ByteReadChannel): RedisMessage {
+            public suspend fun parse(incoming: ByteReadChannel): RedisMessage {
                 val length = readLength<MessageSetMessage>(incoming)
                 val result = Array<RedisMessage>(length) { NullMessage }
                 for (i in 0 until length) {
@@ -457,24 +465,24 @@ internal sealed class RedisMessage {
         }
     }
 
-    data class MessagePushMessage(
+    public data class MessagePushMessage(
         val value: List<RedisMessage>,
     ) : ArrayLikeMessage() {
         override fun asList(): List<RedisMessage> =
             value
 
-        override suspend fun writeTo(outgoing: ByteWriteChannel) {
+        override public suspend fun writeTo(outgoing: ByteWriteChannel) {
             outgoing.writeFully(">${value.size}\r\n".encodeToByteArray())
             for (item in value) {
                 item.writeTo(outgoing)
             }
         }
 
-        companion object {
-            const val TYPE_BYTE: Byte = 62 // '>'
+        public companion object {
+            public const val TYPE_BYTE: Byte = 62 // '>'
 
             // "><number-of-elements>\r\n<element-1>...<element-n>" -> [<element-1>, ..., <element-n>]
-            suspend fun parse(incoming: ByteReadChannel): MessagePushMessage {
+            public suspend fun parse(incoming: ByteReadChannel): MessagePushMessage {
                 val length = readLength<MessagePushMessage>(incoming)
                 val result = Array<RedisMessage>(length) { NullMessage }
                 for (i in 0 until length) {
@@ -488,19 +496,19 @@ internal sealed class RedisMessage {
         }
     }
 
-    sealed class ErrorMessage : RedisMessage() {
-        abstract val value: String
+    public sealed class ErrorMessage : RedisMessage() {
+        public abstract val value: String
     }
 
-    sealed class StringMessage : RedisMessage() {
-        abstract val value: String
-        abstract val data: ByteArray
+    public sealed class StringMessage : RedisMessage() {
+        public abstract val value: String
+        public abstract val data: ByteArray
     }
 
-    sealed class NumericMessage : RedisMessage()
+    public sealed class NumericMessage : RedisMessage()
 
-    sealed class ArrayLikeMessage : RedisMessage() {
-        abstract fun asList(): List<RedisMessage>
+    public sealed class ArrayLikeMessage : RedisMessage() {
+        public abstract fun asList(): List<RedisMessage>
     }
 
     protected suspend fun ByteWriteChannel.writeFully(arr: ByteArray) {
@@ -511,7 +519,7 @@ internal sealed class RedisMessage {
         )
     }
 
-    companion object {
+    public companion object {
         private const val CR_BYTE: Byte = 13 // \r
         private const val LF_BYTE: Byte = 10 // \n
         private val CRLF_BYTES = ByteArray(2).apply {
@@ -519,7 +527,7 @@ internal sealed class RedisMessage {
             this[1] = LF_BYTE
         }
 
-        suspend fun parse(incoming: ByteReadChannel): RedisMessage {
+        public suspend fun parse(incoming: ByteReadChannel): RedisMessage {
             return when (
                 val typeByte = incoming.readByte()
             ) {

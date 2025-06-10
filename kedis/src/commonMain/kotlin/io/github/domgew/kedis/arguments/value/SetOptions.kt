@@ -36,7 +36,7 @@ public data class SetOptions(
     }
 
     public enum class PreviousKeyHandling(
-        internal val apiValue: String?,
+        public val apiValue: String?,
     ) {
         /**
          * Set the given key to the given value in any case

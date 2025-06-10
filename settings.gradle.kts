@@ -22,6 +22,7 @@ dependencyResolutionManagement {
 rootProject.name = "kedis"
 
 include(":kedis")
+include(":kedis-json")
 
 if (System.getenv("IS_CI") != "yes") {
     include(":example")
