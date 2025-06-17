@@ -9,6 +9,7 @@ import io.github.domgew.kedis.commands.KedisCommand
 import io.github.domgew.kedis.commands.KedisHashCommands
 import io.github.domgew.kedis.commands.KedisServerCommands
 import io.github.domgew.kedis.commands.KedisValueCommands
+import io.github.domgew.kedis.commands.KedisKeysCommands
 import io.github.domgew.kedis.impl.DefaultKedisClient
 import io.github.domgew.kedis.results.server.BgSaveResult
 import io.github.domgew.kedis.results.server.InfoSection
@@ -533,6 +534,29 @@ public interface KedisClient : AutoCloseable {
         execute(
             command = KedisValueCommands.exists(
                 key = key,
+            ),
+        )
+
+    /**
+     * @see [KedisKeysCommands.keys]
+     */
+    @Deprecated(
+        message = "Use commands",
+        replaceWith = ReplaceWith(
+            expression = "execute(\n" +
+                "    command = KedisKeysCommands.keys(\n" +
+                "        pattern = pattern,\n" +
+                "    ),\n" +
+                ")",
+            "io.github.domgew.kedis.commands.KedisKeysCommands",
+        ),
+    )
+    public suspend fun keys(
+        pattern: String,
+    ): List<String> =
+        execute(
+            command = KedisKeysCommands.keys(
+                pattern = pattern,
             ),
         )
 
