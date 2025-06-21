@@ -13,7 +13,7 @@ public class JsonSetCommand<T: Any>(
     private val key: String,
     private val value: T,
     private val serializer: KSerializer<T>,
-    private val path: JsonPath = JsonPath.ROOT,
+    private val path: JsonPath,
     private val previousKeyHandling: SetOptions.PreviousKeyHandling?
 ) : KedisFullCommand<SetResult> {
 

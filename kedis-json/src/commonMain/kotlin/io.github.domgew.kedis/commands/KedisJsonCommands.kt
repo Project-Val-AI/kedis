@@ -1,8 +1,10 @@
 package io.github.domgew.kedis.commands
 
 import io.github.domgew.kedis.arguments.value.SetOptions
+import io.github.domgew.kedis.commands.json.JsonDelCommand
 import io.github.domgew.kedis.commands.json.JsonGetCommand
 import io.github.domgew.kedis.commands.json.JsonSetCommand
+import io.github.domgew.kedis.commands.json.JsonTypeCommand
 import io.github.domgew.kedis.impl.JsonPath
 import io.github.domgew.kedis.results.value.SetResult
 import kotlinx.serialization.InternalSerializationApi
@@ -51,4 +53,34 @@ public object KedisJsonCommands {
             previousKeyHandling = previousKeyHandling
         )
 
+    /**
+     * Delete a value.
+     *
+     * [https://redis.io/commands/json.del/](https://redis.io/commands/json.del/)
+     * @return number of paths deleted
+     */
+    public fun jsonDel(
+        key: String,
+        path: JsonPath = JsonPath.ROOT
+    ): KedisCommand<Long> =
+        JsonDelCommand(
+            key = key,
+            path = path,
+        )
+
+    /**
+     * Report the type of JSON value at path
+     *
+     * [https://redis.io/commands/json.type/](https://redis.io/commands/json.type/)
+     * @return an array of string replies for each path, specified as the value's type.
+     */
+    public fun jsonType(
+        key: String,
+        path: JsonPath = JsonPath.ROOT
+    ): KedisCommand<Array<String>> {
+        return JsonTypeCommand(
+            key = key,
+            path = path
+        )
+    }
 }

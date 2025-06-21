@@ -10,7 +10,7 @@ import kotlinx.serialization.json.Json
 public class JsonGetCommand<T: Any>(
     private val key: String,
     private val serializer: KSerializer<T>,
-    private val path: JsonPath = JsonPath.ROOT
+    private val path: JsonPath
 ) : KedisFullCommand<T?> {
 
     override fun fromRedisResponse(response: RedisMessage): T? =
