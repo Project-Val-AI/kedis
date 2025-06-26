@@ -7,6 +7,7 @@ public data class JsonPath(
 ) {
 
     public constructor(property: KProperty<*>):this(path(property))
+    public constructor(vararg properties: KProperty<*>):this(properties.joinToString{path(it)})
 
     public operator fun plus(path: JsonPath):JsonPath {
         this.value += path.value

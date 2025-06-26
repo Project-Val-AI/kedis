@@ -5,20 +5,17 @@ import io.github.domgew.kedis.commands.KedisFullCommand
 import io.github.domgew.kedis.impl.JsonPath
 import io.github.domgew.kedis.impl.RedisMessage
 
-internal class JsonTypeCommand(
+internal class JsonToggleCommand(
     private val key: String,
     private val path: JsonPath,
-) : KedisFullCommand<Array<String>> {
+) : KedisFullCommand<Array<Long>> {
 
-    override fun fromRedisResponse(response: RedisMessage): Array<String> {
-        return when (response) {
+    override fun fromRedisResponse(response: RedisMessage): Array<Long> =
+        when (response) {
             is RedisMessage.ArrayMessage -> response.value
-                .map{it as RedisMessage.StringMessage}
+                .map{it as RedisMessage.IntegerMessage}
                 .map{it.value}
                 .toTypedArray()
-
-            is RedisMessage.NullMessage ->
-                emptyArray()
 
             is RedisMessage.ErrorMessage ->
                 handleRedisErrorResponse(
@@ -27,10 +24,9 @@ internal class JsonTypeCommand(
 
             else ->
                 throw KedisException.WrongResponseException(
-                    message = "Expected array, map, or null response, was ${response::class.simpleName}",
+                    message = "Expected integer response, was ${response::class.simpleName}",
                 )
         }
-    }
 
     override fun toRedisRequest(): RedisMessage {
         return RedisMessage.ArrayMessage(
@@ -43,6 +39,6 @@ internal class JsonTypeCommand(
     }
 
     public companion object {
-        private const val OPERATION_NAME = "JSON.TYPE"
+        private const val OPERATION_NAME = "JSON.TOGGLE"
     }
 }
