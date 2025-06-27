@@ -47,3 +47,7 @@ public data class JsonPath(
     }
 
 }
+
+public operator fun KProperty<KProperty<*>>.plus(property: KProperty<*>):JsonPath {
+    return JsonPath(this).plus(property)
+}

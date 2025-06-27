@@ -113,4 +113,14 @@ public object KedisJsonCommands {
             path = path
         )
     }
+
+    public fun jsonToggle(
+        key: String,
+        path: KProperty<Boolean>
+    ): KedisCommand<Array<Long>> {
+        return JsonToggleCommand(
+            key = key,
+            path = JsonPath(path)
+        )
+    }
 }
